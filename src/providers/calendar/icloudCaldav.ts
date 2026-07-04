@@ -1,8 +1,9 @@
-import type { CalendarProvider } from '../types';
+// iCloud Calendar via CalDAV with an app-specific password — IF-4 on
+// non-Apple platforms.
 
-// Implemented in the provider integration pass.
+import type { CalendarProvider } from '../types';
+import { createCaldavEvent } from '../caldav';
+
 export const icloudCaldavCalendarProvider: CalendarProvider = {
-  async createEvent() {
-    throw new Error('This calendar service is not yet connected. Open Settings to connect it.');
-  },
+  createEvent: (spec) => createCaldavEvent(spec),
 };

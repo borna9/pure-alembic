@@ -9,7 +9,8 @@ import {
   useSettingsStore,
 } from '../../src/store/settingsStore';
 import { clearConnection, ConnectionKey, isConnected } from '../../src/providers/connections';
-import { Button } from '../../src/ui/fields';
+import { connectCaldav, connectService } from '../../src/providers/connect';
+import { Button, Field, TextField } from '../../src/ui/fields';
 import { colors } from '../../src/ui/theme';
 
 const isIOS = Platform.OS === 'ios';
@@ -68,6 +69,7 @@ export default function ServicesSettings() {
           active={settings.calendarService === c.kind}
           connected={c.connection ? !!connected[c.connection] : true}
           onSelect={() => settings.setCalendarService(c.kind)}
+          onConnected={refresh}
           onDisconnect={async () => {
             if (c.connection) await clearConnection(c.connection);
             if (settings.calendarService === c.kind) settings.setCalendarService(null);
@@ -84,6 +86,7 @@ export default function ServicesSettings() {
           active={settings.reminderService === r.kind}
           connected={r.connection ? !!connected[r.connection] : true}
           onSelect={() => settings.setReminderService(r.kind)}
+          onConnected={refresh}
           onDisconnect={async () => {
             if (r.connection) await clearConnection(r.connection);
             if (settings.reminderService === r.kind) settings.setReminderService(null);
@@ -101,8 +104,34 @@ function ServiceCard(props: {
   connected: boolean;
   onSelect: () => void;
   onDisconnect: () => void;
+  onConnected?: () => void;
 }) {
   const { row, active, connected } = props;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isCaldav = row.connection === 'icloud-caldav';
+  const [appleId, setAppleId] = useState('');
+  const [appPassword, setAppPassword] = useState('');
+
+  const connect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (isCaldav) {
+        if (!appleId || !appPassword) throw new Error('Enter your Apple ID and app-specific password.');
+        await connectCaldav(appleId.trim(), appPassword.trim());
+        setAppPassword('');
+      } else {
+        await connectService(row.kind as CalendarServiceKind | ReminderServiceKind);
+      }
+      props.onConnected?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <View style={[styles.card, active && styles.cardActive]}>
       <View style={styles.cardHead}>
@@ -113,7 +142,24 @@ function ServiceCard(props: {
       <Text style={[styles.status, connected ? styles.statusOk : styles.statusOff]}>
         {connected ? 'Connected' : 'Not connected'}
       </Text>
+
+      {!connected && isCaldav && (
+        <View style={styles.caldavForm}>
+          <Field label="Apple ID (email)">
+            <TextField value={appleId} onChange={setAppleId} placeholder="you@icloud.com" />
+          </Field>
+          <Field label="App-specific password (from appleid.apple.com)">
+            <TextField value={appPassword} onChange={setAppPassword} placeholder="xxxx-xxxx-xxxx-xxxx" />
+          </Field>
+        </View>
+      )}
+
       <View style={styles.actions}>
+        {!connected && (
+          <View style={styles.actionButton}>
+            <Button title={busy ? 'Connecting…' : 'Connect'} disabled={busy} onPress={connect} />
+          </View>
+        )}
         {!active && (
           <View style={styles.actionButton}>
             <Button title="Use this service" kind="secondary" onPress={props.onSelect} />
@@ -125,6 +171,7 @@ function ServiceCard(props: {
           </View>
         )}
       </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
 }
@@ -145,4 +192,6 @@ const styles = StyleSheet.create({
   statusOff: { color: colors.subtext },
   actions: { flexDirection: 'row', gap: 10, marginTop: 10 },
   actionButton: { flex: 1 },
+  caldavForm: { marginTop: 10 },
+  errorText: { fontSize: 12, color: colors.danger, marginTop: 8 },
 });
