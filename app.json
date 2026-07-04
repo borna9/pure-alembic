@@ -1,15 +1,22 @@
 {
   "expo": {
-    "name": "pure-alembic",
+    "name": "Pure Alembic",
     "slug": "pure-alembic",
-    "version": "1.0.0",
+    "version": "0.1.0",
+    "scheme": "purealembic",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.firststirrings.purealembic",
+      "infoPlist": {
+        "NSCalendarsFullAccessUsageDescription": "Pure Alembic creates calendar events for the tasks you plan.",
+        "NSRemindersFullAccessUsageDescription": "Pure Alembic creates reminders for tasks that have no date or hours."
+      }
     },
     "android": {
+      "package": "com.firststirrings.purealembic",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -19,7 +26,21 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Pure Alembic creates calendar events for the tasks you plan.",
+          "remindersPermission": "Pure Alembic creates reminders for tasks that have no date or hours."
+        }
+      ]
+    ]
   }
 }
