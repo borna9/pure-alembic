@@ -1,0 +1,71 @@
+# Builds a signed Android APK and attaches it to a GitHub Release —
+# completely free distribution via direct download.
+#
+# Trigger: push a tag like v0.1.0.
+#
+# Signing: set repository secret ANDROID_KEYSTORE_BASE64 to a base64-encoded
+# keystore created with:
+#   keytool -genkeypair -v -keystore release.keystore -alias androiddebugkey \
+#     -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000
+#   base64 -i release.keystore | pbcopy
+# Keep that keystore safe — app updates must be signed with the same key.
+# Without the secret, a fresh keystore is generated per run (installs fine,
+# but users must uninstall before installing a later differently-keyed build).
+
+name: Android release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Generate native Android project
+        run: npx expo prebuild -p android --no-install
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}
+          EXPO_PUBLIC_MICROSOFT_CLIENT_ID: ${{ vars.EXPO_PUBLIC_MICROSOFT_CLIENT_ID }}
+      - name: Install signing keystore
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/debug.keystore
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret — generating a one-off keystore."
+            rm -f android/app/debug.keystore
+            keytool -genkeypair -v -keystore android/app/debug.keystore \
+              -alias androiddebugkey -storepass android -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Pure Alembic,O=Pure Alembic,C=US"
+          fi
+      - name: Build APK
+        run: cd android && ./gradlew assembleRelease --no-daemon
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}
+          EXPO_PUBLIC_MICROSOFT_CLIENT_ID: ${{ vars.EXPO_PUBLIC_MICROSOFT_CLIENT_ID }}
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk pure-alembic-${{ github.ref_name }}.apk
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: pure-alembic-*.apk
+          generate_release_notes: true

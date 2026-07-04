@@ -1,0 +1,58 @@
+# Deploys the web build to GitHub Pages (free) on every push to main.
+# Repository Settings → Pages → Source must be set to "GitHub Actions".
+#
+# Optional repository variables (Settings → Secrets and variables → Actions
+# → Variables) baked into the client at build time; all are public-safe:
+#   EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY,
+#   EXPO_PUBLIC_GOOGLE_CLIENT_ID, EXPO_PUBLIC_MICROSOFT_CLIENT_ID
+
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export static web build
+        run: npx expo export -p web
+        env:
+          # Serve from /<repo-name>/ on github.io; remove for a custom domain.
+          EXPO_BASE_URL: /${{ github.event.repository.name }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}
+          EXPO_PUBLIC_MICROSOFT_CLIENT_ID: ${{ vars.EXPO_PUBLIC_MICROSOFT_CLIENT_ID }}
+      - name: SPA fallback for deep links
+        run: cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
