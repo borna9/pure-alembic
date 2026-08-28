@@ -53,3 +53,7 @@ export function dayOfMonth(date: ISODate): number {
 export function isWithin(date: ISODate, start: ISODate, end: ISODate): boolean {
   return compareDates(date, start) >= 0 && compareDates(date, end) <= 0;
 }
+
+export function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}

@@ -164,19 +164,19 @@ export function KnownStep() {
           <View style={styles.pair}>
             <View style={styles.half}>
               <Field label="Start date">
-                <DateField value={startDate} onChange={setStartDate} />
+                <DateField value={startDate} onChange={setStartDate} minDate={s.windowStart} maxDate={s.windowEnd} />
               </Field>
             </View>
             <View style={styles.half}>
               <Field label="End date">
-                <DateField value={endDate} onChange={setEndDate} />
+                <DateField value={endDate} onChange={setEndDate} minDate={s.windowStart} maxDate={s.windowEnd} />
               </Field>
             </View>
           </View>
         )}
         {mode === 'dueOnly' && (
           <Field label="Due date">
-            <DateField value={dueDate} onChange={setDueDate} />
+            <DateField value={dueDate} onChange={setDueDate} minDate={s.windowStart} maxDate={s.windowEnd} />
           </Field>
         )}
         {mode === 'weekly' && (
@@ -265,12 +265,12 @@ export function FlexibleStep(props: { phase: 'schedule' | 'block' }) {
         <View style={styles.pair}>
           <View style={styles.half}>
             <Field label="Earliest date">
-              <DateField value={earliest} onChange={setEarliest} />
+              <DateField value={earliest} onChange={setEarliest} minDate={s.windowStart} maxDate={s.windowEnd} />
             </Field>
           </View>
           <View style={styles.half}>
             <Field label="Latest date">
-              <DateField value={latest} onChange={setLatest} />
+              <DateField value={latest} onChange={setLatest} minDate={s.windowStart} maxDate={s.windowEnd} />
             </Field>
           </View>
         </View>

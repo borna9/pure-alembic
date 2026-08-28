@@ -2,8 +2,10 @@
 // as text (YYYY-MM-DD / HH:MM) so one implementation works on iOS,
 // Android, and web without native picker dependencies.
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { CalendarPicker } from './CalendarPicker';
 import { colors } from './theme';
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -53,18 +55,50 @@ export function NumberField(props: { value: number; onChange: (v: number) => voi
 export const isValidDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 export const isValidTime = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 
-export function DateField(props: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+export function DateField(props: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  /** Selectable range for the calendar (e.g. the planning window, FR-4). */
+  minDate?: string;
+  maxDate?: string;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const invalid = props.value.length > 0 && !isValidDate(props.value);
   return (
-    <TextInput
-      style={[styles.input, invalid && styles.invalid]}
-      value={props.value}
-      onChangeText={props.onChange}
-      placeholder={props.placeholder ?? 'YYYY-MM-DD'}
-      placeholderTextColor={colors.subtext}
-      autoCapitalize="none"
-      autoCorrect={false}
-    />
+    <View>
+      <View style={styles.dateRow}>
+        <TextInput
+          style={[styles.input, styles.dateInput, invalid && styles.invalid]}
+          value={props.value}
+          onChangeText={props.onChange}
+          placeholder={props.placeholder ?? 'YYYY-MM-DD'}
+          placeholderTextColor={colors.subtext}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onFocus={() => setPickerOpen(true)}
+        />
+        <Pressable
+          style={[styles.calendarToggle, pickerOpen && styles.calendarToggleActive]}
+          onPress={() => setPickerOpen((o) => !o)}
+          hitSlop={6}
+          accessibilityLabel="Open date picker"
+        >
+          <Ionicons name="calendar" size={20} color={pickerOpen ? '#fff' : colors.accent} />
+        </Pressable>
+      </View>
+      {pickerOpen && (
+        <CalendarPicker
+          value={props.value}
+          minDate={props.minDate}
+          maxDate={props.maxDate}
+          onSelect={(date) => {
+            props.onChange(date);
+            setPickerOpen(false);
+          }}
+        />
+      )}
+    </View>
   );
 }
 
@@ -154,6 +188,16 @@ const styles = StyleSheet.create({
   },
   multiline: { minHeight: 70, textAlignVertical: 'top' },
   invalid: { borderColor: colors.danger },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateInput: { flex: 1 },
+  calendarToggle: {
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 10,
+    padding: 9,
+    backgroundColor: colors.card,
+  },
+  calendarToggleActive: { backgroundColor: colors.accent },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1,
