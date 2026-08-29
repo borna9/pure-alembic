@@ -281,11 +281,6 @@ export function ReviewStep() {
                 <Field label="Priority">
                   <Segmented<Priority> options={PRIORITIES} value={t.priority} onChange={(v) => edit(t.localId, { priority: v })} />
                 </Field>
-                <Button
-                  title="Remove this task"
-                  kind="danger"
-                  onPress={() => setRemoved((r) => new Set(r).add(t.localId))}
-                />
                 {(() => {
                   // Occurrences of the same draft (daily routines, weekly/
                   // monthly recurrences) — prep/follow-up tasks excluded.
@@ -317,6 +312,11 @@ export function ReviewStep() {
                     />
                   );
                 })()}
+                <Button
+                  title="Remove this task"
+                  kind="danger"
+                  onPress={() => setRemoved((r) => new Set(r).add(t.localId))}
+                />
               </View>
             )}
           </View>
@@ -529,6 +529,7 @@ const styles = StyleSheet.create({
   rangeHint: { fontSize: 12, color: colors.subtext, marginBottom: 10 },
   occurrences: {
     marginTop: 12,
+    marginBottom: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     paddingTop: 12,
