@@ -2,7 +2,7 @@
 // as text (YYYY-MM-DD / HH:MM) so one implementation works on iOS,
 // Android, and web without native picker dependencies.
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CalendarPicker } from './CalendarPicker';
@@ -35,14 +35,35 @@ export function TextField(props: {
   );
 }
 
+const parseNumeric = (t: string) => {
+  const n = parseFloat(t.replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+
+/**
+ * Numeric input accepting decimals (e.g. 7.5 hours). The typed text is
+ * kept as local state so partial entries like "7." survive re-renders;
+ * the parsed number is propagated on every change.
+ */
 export function NumberField(props: { value: number; onChange: (v: number) => void; placeholder?: string }) {
+  const [text, setText] = useState(props.value === 0 ? '' : String(props.value));
+
+  // Adopt external changes (draft reset, clamping) without clobbering typing.
+  useEffect(() => {
+    if (parseNumeric(text) !== props.value) {
+      setText(props.value === 0 ? '' : String(props.value));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.value]);
+
   return (
     <TextInput
       style={styles.input}
-      value={props.value === 0 ? '' : String(props.value)}
+      value={text}
       onChangeText={(t) => {
-        const n = parseFloat(t.replace(',', '.'));
-        props.onChange(Number.isFinite(n) && n >= 0 ? n : 0);
+        if (!/^\d*[.,]?\d*$/.test(t)) return; // digits with one decimal separator
+        setText(t);
+        props.onChange(parseNumeric(t));
       }}
       placeholder={props.placeholder ?? '0'}
       placeholderTextColor={colors.subtext}

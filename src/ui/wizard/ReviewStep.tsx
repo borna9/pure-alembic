@@ -47,7 +47,7 @@ export function ReviewStep() {
     [generated, edits, removed]
   );
 
-  const totalHours = tasks.reduce((sum, t) => sum + t.hours, 0);
+  const totalHours = Math.round(tasks.reduce((sum, t) => sum + t.hours, 0) * 100) / 100;
   const overCount = tasks.filter((t) => t.overCapacity).length;
 
   if (result) {
