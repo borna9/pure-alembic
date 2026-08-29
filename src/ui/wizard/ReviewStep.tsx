@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   occurrencesTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
-  occurrenceRange: { flexDirection: 'row', gap: 12 },
-  occurrenceRangeField: { flex: 1 },
+  occurrenceRange: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
+  occurrenceRangeField: { flex: 1, minWidth: 150 },
   bulkBar: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   bulkAction: { flex: 1 },
   bulkEditor: {

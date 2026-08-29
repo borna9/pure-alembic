@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 70, textAlignVertical: 'top' },
   invalid: { borderColor: colors.danger },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dateInput: { flex: 1 },
+  dateInput: { flex: 1, minWidth: 0, width: 0 },
   calendarToggle: {
     borderWidth: 1,
     borderColor: colors.accent,
