@@ -22,8 +22,8 @@ Everything here is **free**. The app runs fully offline with zero setup; each se
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a project (free, no billing needed).
 2. **APIs & Services → Library** → enable **Google Calendar API**.
-3. **APIs & Services → OAuth consent screen** → External → fill in the basics. While the app is in "Testing" you add your own Google account as a test user; that is enough for personal use. (Publishing to all users later requires Google's verification review — still free, just paperwork.)
-4. **Credentials → Create credentials → OAuth client ID**:
+3. **APIs & Services → OAuth consent screen** (now called the **Google Auth Platform**) → click **Get started** and complete the wizard: App information → **Audience: External** → Contact information → Create. Then, in the **Audience** section of the sidebar, add your own Google account under **Test users**; that is enough for personal use while the app is in "Testing". (Publishing to all users later requires Google's verification review — still free, just paperwork.)
+4. **Clients → Create client** (or the classic **Credentials → Create credentials → OAuth client ID**):
    - Type **Web application** for the web build. Authorized redirect URIs: your deployed web origin (e.g. `https://<you>.github.io`) and `http://localhost:8081` for development.
    - For Android/iOS builds create additional Android/iOS client IDs with the package name `com.firststirrings.purealembic` (and the custom scheme redirect `purealembic:/oauth`).
 5. Put the client ID in `EXPO_PUBLIC_GOOGLE_CLIENT_ID`.
