@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { GeneratedTask } from '../../domain/planning';
 import { PRIORITIES, Priority, TASK_TYPES, TaskType } from '../../domain/types';
+import { isWithin } from '../../logic/dates';
 import { generatePlan } from '../../logic/planGeneration';
 import { commitPlan, CommitResult } from '../../services/commitPlan';
 import { usePlanningSession } from '../../store/planningSession';
@@ -285,6 +286,37 @@ export function ReviewStep() {
                   kind="danger"
                   onPress={() => setRemoved((r) => new Set(r).add(t.localId))}
                 />
+                {(() => {
+                  // Occurrences of the same draft (daily routines, weekly/
+                  // monthly recurrences) — prep/follow-up tasks excluded.
+                  const siblings = tasks.filter(
+                    (x) => x.sourceDraftId === t.sourceDraftId && !x.parentLocalId
+                  );
+                  if (siblings.length < 2 || t.parentLocalId) return null;
+                  const pick = (ids: string[]) => {
+                    setSelectMode(true);
+                    setSelected(new Set(ids));
+                    setAnchorId(null);
+                    setExpanded(null);
+                    setBulkOpen(true);
+                  };
+                  return (
+                    <OccurrenceSelector
+                      count={siblings.length}
+                      windowStart={session.windowStart}
+                      windowEnd={session.windowEnd}
+                      onSelectAll={() => pick(siblings.map((x) => x.localId))}
+                      onSelectRange={(from, to) => {
+                        const ids = siblings
+                          .filter((x) => isWithin(x.dueDate, from, to))
+                          .map((x) => x.localId);
+                        if (ids.length === 0) return false;
+                        pick(ids);
+                        return true;
+                      }}
+                    />
+                  );
+                })()}
               </View>
             )}
           </View>
@@ -307,6 +339,55 @@ export function ReviewStep() {
           }}
         />
       )}
+    </View>
+  );
+}
+
+/**
+ * Actions on a repeating task's occurrences: select them all — or just
+ * those in a date range — and jump straight into the bulk editor.
+ */
+function OccurrenceSelector(props: {
+  count: number;
+  windowStart: string;
+  windowEnd: string;
+  onSelectAll: () => void;
+  onSelectRange: (from: string, to: string) => boolean;
+}) {
+  const [from, setFrom] = useState(props.windowStart);
+  const [to, setTo] = useState(props.windowEnd);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <View style={styles.occurrences}>
+      <Text style={styles.occurrencesTitle}>
+        This task has {props.count} occurrences in the plan
+      </Text>
+      <Button title={`Edit all ${props.count} occurrences`} kind="secondary" onPress={props.onSelectAll} />
+      <View style={styles.occurrenceRange}>
+        <View style={styles.occurrenceRangeField}>
+          <Field label="From">
+            <DateField value={from} onChange={setFrom} minDate={props.windowStart} maxDate={props.windowEnd} />
+          </Field>
+        </View>
+        <View style={styles.occurrenceRangeField}>
+          <Field label="To">
+            <DateField value={to} onChange={setTo} minDate={props.windowStart} maxDate={props.windowEnd} />
+          </Field>
+        </View>
+      </View>
+      <Button
+        title="Edit occurrences in range"
+        kind="secondary"
+        onPress={() => {
+          if (!isValidDate(from) || !isValidDate(to) || from > to) {
+            setError('Enter a valid date range (from ≤ to).');
+            return;
+          }
+          setError(props.onSelectRange(from, to) ? null : 'No occurrences fall in that range.');
+        }}
+      />
+      {error ? <Text style={styles.bulkError}>{error}</Text> : null}
     </View>
   );
 }
@@ -446,6 +527,16 @@ const styles = StyleSheet.create({
   toolbarTextActive: { color: '#fff' },
   selectedCount: { fontSize: 13, color: colors.subtext, marginLeft: 'auto' },
   rangeHint: { fontSize: 12, color: colors.subtext, marginBottom: 10 },
+  occurrences: {
+    marginTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+    gap: 8,
+  },
+  occurrencesTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  occurrenceRange: { flexDirection: 'row', gap: 12 },
+  occurrenceRangeField: { flex: 1 },
   bulkBar: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   bulkAction: { flex: 1 },
   bulkEditor: {
