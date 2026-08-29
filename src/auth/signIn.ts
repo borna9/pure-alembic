@@ -26,7 +26,9 @@ export async function signInWithProvider(provider: SocialProvider): Promise<void
   if (Platform.OS === 'web') {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      // Return to the current page — the app may be served under a
+      // subpath (GitHub Pages), so the bare origin would miss the app.
+      options: { redirectTo: window.location.href },
     });
     if (error) throw error;
     return;
@@ -56,7 +58,9 @@ export async function linkProvider(provider: SocialProvider): Promise<void> {
   if (Platform.OS === 'web') {
     const { error } = await supabase.auth.linkIdentity({
       provider,
-      options: { redirectTo: window.location.origin },
+      // Return to the current page — the app may be served under a
+      // subpath (GitHub Pages), so the bare origin would miss the app.
+      options: { redirectTo: window.location.href },
     });
     if (error) throw error;
     return;
