@@ -3,13 +3,14 @@
 
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { GeneratedTask } from '../../domain/planning';
-import { PRIORITIES, Priority } from '../../domain/types';
+import { PRIORITIES, Priority, TASK_TYPES, TaskType } from '../../domain/types';
 import { generatePlan } from '../../logic/planGeneration';
 import { commitPlan, CommitResult } from '../../services/commitPlan';
 import { usePlanningSession } from '../../store/planningSession';
 import { useSettingsStore } from '../../store/settingsStore';
-import { Button, DateField, Field, isValidDate, NumberField, Segmented, TextField } from '../fields';
+import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TextField, TimeField } from '../fields';
 import { StepHeading } from './steps';
 import { colors } from '../theme';
 
@@ -37,6 +38,10 @@ export function ReviewStep() {
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<CommitResult | null>(null);
   const [busy, setBusy] = useState(false);
+  // Multi-select: checkboxes for bulk delete and bulk field override.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const tasks = useMemo(
     () =>
@@ -94,22 +99,125 @@ export function ReviewStep() {
         </View>
       )}
 
-      {tasks.map((t) => {
-        const isOpen = expanded === t.localId;
-        return (
-          <View key={t.localId} style={[styles.row, t.overCapacity && styles.rowOver]}>
-            <Pressable onPress={() => setExpanded(isOpen ? null : t.localId)}>
-              <View style={styles.rowHead}>
-                <Text style={styles.rowDate}>{t.dueDate}</Text>
-                <Text style={styles.rowType}>{t.taskType}</Text>
-              </View>
-              <Text style={styles.rowDesc}>{t.description}</Text>
-              <Text style={styles.rowMeta}>
-                {t.priority}
-                {t.hours > 0 ? ` · ${t.hours}h` : ''}
-                {t.startTime ? ` · ${t.startTime}` : ''}
-                {t.tagNames.length ? ` · ${t.tagNames.join(', ')}` : ''}
+      {tasks.length > 0 && (
+        <View style={styles.toolbar}>
+          <Pressable
+            style={[styles.toolbarButton, selectMode && styles.toolbarButtonActive]}
+            onPress={() => {
+              setSelectMode(!selectMode);
+              setSelected(new Set());
+              setBulkOpen(false);
+              setExpanded(null);
+            }}
+          >
+            <Ionicons name="checkbox-outline" size={16} color={selectMode ? '#fff' : colors.accent} />
+            <Text style={[styles.toolbarText, selectMode && styles.toolbarTextActive]}>
+              {selectMode ? 'Done selecting' : 'Select tasks'}
+            </Text>
+          </Pressable>
+          {selectMode && (
+            <Pressable
+              style={styles.toolbarButton}
+              onPress={() =>
+                setSelected(
+                  selected.size === tasks.length
+                    ? new Set()
+                    : new Set(tasks.map((t) => t.localId))
+                )
+              }
+            >
+              <Text style={styles.toolbarText}>
+                {selected.size === tasks.length ? 'Clear all' : 'Select all'}
               </Text>
+            </Pressable>
+          )}
+          {selectMode && <Text style={styles.selectedCount}>{selected.size} selected</Text>}
+        </View>
+      )}
+
+      {selectMode && selected.size > 0 && (
+        <View style={styles.bulkBar}>
+          <View style={styles.bulkAction}>
+            <Button
+              title={`Delete ${selected.size}`}
+              kind="danger"
+              onPress={() => {
+                setRemoved((r) => new Set([...r, ...selected]));
+                setSelected(new Set());
+                setBulkOpen(false);
+              }}
+            />
+          </View>
+          <View style={styles.bulkAction}>
+            <Button
+              title={bulkOpen ? 'Close bulk edit' : `Edit ${selected.size} tasks`}
+              kind="secondary"
+              onPress={() => setBulkOpen(!bulkOpen)}
+            />
+          </View>
+        </View>
+      )}
+
+      {selectMode && bulkOpen && selected.size > 0 && (
+        <BulkEditor
+          key={[...selected].sort().join(',')}
+          tasks={tasks.filter((t) => selected.has(t.localId))}
+          onApply={(patch) => {
+            setEdits((e) => {
+              const next = { ...e };
+              for (const id of selected) next[id] = { ...next[id], ...patch };
+              return next;
+            });
+            setBulkOpen(false);
+          }}
+        />
+      )}
+
+      {tasks.map((t) => {
+        const isOpen = !selectMode && expanded === t.localId;
+        const isSelected = selected.has(t.localId);
+        return (
+          <View
+            key={t.localId}
+            style={[styles.row, t.overCapacity && styles.rowOver, isSelected && styles.rowSelected]}
+          >
+            <Pressable
+              onPress={() => {
+                if (selectMode) {
+                  setSelected((s) => {
+                    const next = new Set(s);
+                    if (next.has(t.localId)) next.delete(t.localId);
+                    else next.add(t.localId);
+                    return next;
+                  });
+                } else {
+                  setExpanded(isOpen ? null : t.localId);
+                }
+              }}
+            >
+              <View style={styles.rowBody}>
+                {selectMode && (
+                  <Ionicons
+                    name={isSelected ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={isSelected ? colors.accent : colors.border}
+                    style={styles.checkbox}
+                  />
+                )}
+                <View style={styles.rowTexts}>
+                  <View style={styles.rowHead}>
+                    <Text style={styles.rowDate}>{t.dueDate}</Text>
+                    <Text style={styles.rowType}>{t.taskType}</Text>
+                  </View>
+                  <Text style={styles.rowDesc}>{t.description}</Text>
+                  <Text style={styles.rowMeta}>
+                    {t.priority}
+                    {t.hours > 0 ? ` · ${t.hours}h` : ''}
+                    {t.startTime ? ` · ${t.startTime}` : ''}
+                    {t.tagNames.length ? ` · ${t.tagNames.join(', ')}` : ''}
+                  </Text>
+                </View>
+              </View>
             </Pressable>
             {isOpen && (
               <View style={styles.editor}>
@@ -156,9 +264,152 @@ export function ReviewStep() {
   );
 }
 
+/**
+ * Bulk field override for the selected tasks. Fields where all selected
+ * tasks agree are pre-filled; differing fields show "mixed values".
+ * Only fields the user actually touches are applied — everything else
+ * keeps each task's own value.
+ */
+function BulkEditor(props: {
+  tasks: GeneratedTask[];
+  onApply: (patch: Partial<GeneratedTask>) => void;
+}) {
+  const uniform = <K extends keyof GeneratedTask>(key: K): GeneratedTask[K] | undefined => {
+    const first = props.tasks[0]?.[key];
+    return props.tasks.every((t) => t[key] === first) ? first : undefined;
+  };
+
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [taskType, setTaskType] = useState<TaskType | null>(uniform('taskType') ?? null);
+  const [priority, setPriority] = useState<Priority | null>(uniform('priority') ?? null);
+  const [dueDate, setDueDate] = useState<string>(uniform('dueDate') ?? '');
+  const [hours, setHours] = useState<number>(uniform('hours') ?? 0);
+  const [startTime, setStartTime] = useState<string>(uniform('startTime') ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const touch = (field: string) => setTouched((s) => new Set(s).add(field));
+  const mixed = (key: keyof GeneratedTask) => uniform(key) === undefined && !touched.has(key);
+
+  const apply = () => {
+    const patch: Partial<GeneratedTask> = {};
+    if (touched.has('taskType') && taskType) patch.taskType = taskType;
+    if (touched.has('priority') && priority) patch.priority = priority;
+    if (touched.has('dueDate')) {
+      if (!isValidDate(dueDate)) {
+        setError('Enter a valid due date (YYYY-MM-DD) or leave it untouched.');
+        return;
+      }
+      patch.dueDate = dueDate;
+    }
+    if (touched.has('hours')) patch.hours = hours;
+    if (touched.has('startTime')) {
+      if (startTime && !isValidTime(startTime)) {
+        setError('Start time must be HH:MM, or empty to clear it.');
+        return;
+      }
+      patch.startTime = startTime || null;
+    }
+    setError(null);
+    props.onApply(patch);
+  };
+
+  return (
+    <View style={styles.bulkEditor}>
+      <Text style={styles.bulkTitle}>
+        Editing {props.tasks.length} tasks — only fields you change are overridden
+      </Text>
+      <Field label={`Task type${mixed('taskType') ? ' (mixed values)' : ''}`}>
+        <Segmented<TaskType>
+          options={TASK_TYPES}
+          value={taskType}
+          onChange={(v) => {
+            setTaskType(v);
+            touch('taskType');
+          }}
+        />
+      </Field>
+      <Field label={`Priority${mixed('priority') ? ' (mixed values)' : ''}`}>
+        <Segmented<Priority>
+          options={PRIORITIES}
+          value={priority}
+          onChange={(v) => {
+            setPriority(v);
+            touch('priority');
+          }}
+        />
+      </Field>
+      <Field label={`Due date${mixed('dueDate') ? ' (mixed values)' : ''}`}>
+        <DateField
+          value={dueDate}
+          onChange={(v) => {
+            setDueDate(v);
+            touch('dueDate');
+          }}
+        />
+      </Field>
+      <Field label={`Hours${mixed('hours') ? ' (mixed values)' : ''}`}>
+        <NumberField
+          value={hours}
+          onChange={(v) => {
+            setHours(v);
+            touch('hours');
+          }}
+        />
+      </Field>
+      <Field label={`Start time${mixed('startTime') ? ' (mixed values)' : ''}`}>
+        <TimeField
+          value={startTime}
+          onChange={(v) => {
+            setStartTime(v);
+            touch('startTime');
+          }}
+        />
+      </Field>
+      {error ? <Text style={styles.bulkError}>{error}</Text> : null}
+      <Button
+        title={touched.size === 0 ? 'No changes yet' : `Apply to ${props.tasks.length} tasks`}
+        disabled={touched.size === 0}
+        onPress={apply}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 8 },
   rowOver: { borderWidth: 1, borderColor: colors.warning },
+  rowSelected: { borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  rowBody: { flexDirection: 'row', alignItems: 'center' },
+  rowTexts: { flex: 1 },
+  checkbox: { marginRight: 10 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  toolbarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.card,
+  },
+  toolbarButtonActive: { backgroundColor: colors.accent },
+  toolbarText: { fontSize: 13, fontWeight: '600', color: colors.accent },
+  toolbarTextActive: { color: '#fff' },
+  selectedCount: { fontSize: 13, color: colors.subtext, marginLeft: 'auto' },
+  bulkBar: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  bulkAction: { flex: 1 },
+  bulkEditor: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: 14,
+    marginBottom: 12,
+  },
+  bulkTitle: { fontSize: 13, fontWeight: '700', color: colors.accent, marginBottom: 12 },
+  bulkError: { fontSize: 13, color: colors.danger, marginBottom: 8 },
   rowHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   rowDate: { fontSize: 12, fontWeight: '700', color: colors.accent },
   rowType: { fontSize: 11, color: colors.subtext },
