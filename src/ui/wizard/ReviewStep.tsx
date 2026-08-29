@@ -42,6 +42,8 @@ export function ReviewStep() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  // Last row tapped in select mode — the anchor for range selection.
+  const [anchorId, setAnchorId] = useState<string | null>(null);
 
   const tasks = useMemo(
     () =>
@@ -84,6 +86,43 @@ export function ReviewStep() {
   const edit = (id: string, patch: Partial<GeneratedTask>) =>
     setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
 
+  const toggleOne = (id: string) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setAnchorId(id);
+  };
+
+  // Range gesture (Shift-click on web, long-press on touch): every row
+  // between the anchor and the pressed row takes the anchor's current
+  // selection state — so it both selects and deselects ranges.
+  const rangeTo = (id: string) => {
+    if (!anchorId || anchorId === id) {
+      toggleOne(id);
+      return;
+    }
+    const ids = tasks.map((t) => t.localId);
+    const a = ids.indexOf(anchorId);
+    const b = ids.indexOf(id);
+    if (a === -1 || b === -1) {
+      toggleOne(id);
+      return;
+    }
+    const state = selected.has(anchorId);
+    setSelected((s) => {
+      const next = new Set(s);
+      for (const rowId of ids.slice(Math.min(a, b), Math.max(a, b) + 1)) {
+        if (state) next.add(rowId);
+        else next.delete(rowId);
+      }
+      return next;
+    });
+    setAnchorId(id);
+  };
+
   return (
     <View>
       <StepHeading
@@ -108,6 +147,7 @@ export function ReviewStep() {
               setSelected(new Set());
               setBulkOpen(false);
               setExpanded(null);
+              setAnchorId(null);
             }}
           >
             <Ionicons name="checkbox-outline" size={16} color={selectMode ? '#fff' : colors.accent} />
@@ -133,6 +173,12 @@ export function ReviewStep() {
           )}
           {selectMode && <Text style={styles.selectedCount}>{selected.size} selected</Text>}
         </View>
+      )}
+
+      {selectMode && (
+        <Text style={styles.rangeHint}>
+          Tap to select · long-press (or Shift-click) to extend a range from the last tapped task
+        </Text>
       )}
 
       {selectMode && selected.size > 0 && (
@@ -182,18 +228,19 @@ export function ReviewStep() {
             style={[styles.row, t.overCapacity && styles.rowOver, isSelected && styles.rowSelected]}
           >
             <Pressable
-              onPress={() => {
+              onPress={(e) => {
                 if (selectMode) {
-                  setSelected((s) => {
-                    const next = new Set(s);
-                    if (next.has(t.localId)) next.delete(t.localId);
-                    else next.add(t.localId);
-                    return next;
-                  });
+                  const shift = Boolean(
+                    (e?.nativeEvent as { shiftKey?: boolean } | undefined)?.shiftKey
+                  );
+                  if (shift) rangeTo(t.localId);
+                  else toggleOne(t.localId);
                 } else {
                   setExpanded(isOpen ? null : t.localId);
                 }
               }}
+              onLongPress={selectMode ? () => rangeTo(t.localId) : undefined}
+              delayLongPress={350}
             >
               <View style={styles.rowBody}>
                 {selectMode && (
@@ -398,6 +445,7 @@ const styles = StyleSheet.create({
   toolbarText: { fontSize: 13, fontWeight: '600', color: colors.accent },
   toolbarTextActive: { color: '#fff' },
   selectedCount: { fontSize: 13, color: colors.subtext, marginLeft: 'auto' },
+  rangeHint: { fontSize: 12, color: colors.subtext, marginBottom: 10 },
   bulkBar: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   bulkAction: { flex: 1 },
   bulkEditor: {
