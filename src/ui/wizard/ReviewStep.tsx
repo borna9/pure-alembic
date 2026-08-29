@@ -33,16 +33,22 @@ export function ReviewStep() {
     ]
   );
 
-  // FR-24: user edits overlay the generated tasks.
-  const [edits, setEdits] = useState<Record<string, Partial<GeneratedTask>>>({});
+  // FR-24: user edits overlay the generated tasks. The overlay lives in
+  // the persisted session store so it survives step navigation, tab
+  // switches, and app restarts — not just this component's lifetime.
+  const edits = session.reviewEdits;
+  const removed = useMemo(() => new Set(session.reviewRemoved), [session.reviewRemoved]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<CommitResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
   // Multi-select: checkboxes for bulk delete and bulk field override.
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  // True while the bulk editor has touched-but-unapplied fields; commit
+  // is blocked so those changes cannot be silently dropped.
+  const [bulkDirty, setBulkDirty] = useState(false);
   // Last row tapped in select mode — the anchor for range selection.
   const [anchorId, setAnchorId] = useState<string | null>(null);
 
@@ -84,8 +90,7 @@ export function ReviewStep() {
     );
   }
 
-  const edit = (id: string, patch: Partial<GeneratedTask>) =>
-    setEdits((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
+  const edit = (id: string, patch: Partial<GeneratedTask>) => session.editReview([id], patch);
 
   const toggleOne = (id: string) => {
     setSelected((s) => {
@@ -147,6 +152,7 @@ export function ReviewStep() {
               setSelectMode(!selectMode);
               setSelected(new Set());
               setBulkOpen(false);
+              setBulkDirty(false);
               setExpanded(null);
               setAnchorId(null);
             }}
@@ -189,9 +195,10 @@ export function ReviewStep() {
               title={`Delete ${selected.size}`}
               kind="danger"
               onPress={() => {
-                setRemoved((r) => new Set([...r, ...selected]));
+                session.removeReview([...selected]);
                 setSelected(new Set());
                 setBulkOpen(false);
+                setBulkDirty(false);
               }}
             />
           </View>
@@ -199,7 +206,10 @@ export function ReviewStep() {
             <Button
               title={bulkOpen ? 'Close bulk edit' : `Edit ${selected.size} tasks`}
               kind="secondary"
-              onPress={() => setBulkOpen(!bulkOpen)}
+              onPress={() => {
+                setBulkOpen(!bulkOpen);
+                setBulkDirty(false);
+              }}
             />
           </View>
         </View>
@@ -209,13 +219,11 @@ export function ReviewStep() {
         <BulkEditor
           key={[...selected].sort().join(',')}
           tasks={tasks.filter((t) => selected.has(t.localId))}
+          onDirtyChange={setBulkDirty}
           onApply={(patch) => {
-            setEdits((e) => {
-              const next = { ...e };
-              for (const id of selected) next[id] = { ...next[id], ...patch };
-              return next;
-            });
+            session.editReview([...selected], patch);
             setBulkOpen(false);
+            setBulkDirty(false);
           }}
         />
       )}
@@ -294,6 +302,7 @@ export function ReviewStep() {
                     setAnchorId(null);
                     setExpanded(null);
                     setBulkOpen(true);
+                    setBulkDirty(false);
                   };
                   return (
                     <OccurrenceSelector
@@ -315,7 +324,7 @@ export function ReviewStep() {
                 <Button
                   title="Remove this task"
                   kind="danger"
-                  onPress={() => setRemoved((r) => new Set(r).add(t.localId))}
+                  onPress={() => session.removeReview([t.localId])}
                 />
               </View>
             )}
@@ -326,18 +335,34 @@ export function ReviewStep() {
       {tasks.length === 0 ? (
         <Text style={styles.hint}>Nothing to commit — go back and add tasks in the earlier phases.</Text>
       ) : (
-        <Button
-          title={busy ? 'Committing…' : `Commit ${tasks.length} tasks`}
-          disabled={busy || tasks.some((t) => !isValidDate(t.dueDate))}
-          onPress={async () => {
-            setBusy(true);
-            try {
-              setResult(await commitPlan(tasks));
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
+        <>
+          {bulkOpen && bulkDirty && (
+            <View style={styles.warning}>
+              <Text style={styles.warningText}>
+                The bulk editor has unapplied changes — press “Apply” there (or close it) before
+                committing, so they aren’t lost.
+              </Text>
+            </View>
+          )}
+          <Button
+            title={busy ? 'Committing…' : `Commit ${tasks.length} tasks`}
+            disabled={busy || (bulkOpen && bulkDirty) || tasks.some((t) => !isValidDate(t.dueDate))}
+            onPress={async () => {
+              setBusy(true);
+              setCommitError(null);
+              try {
+                setResult(await commitPlan(tasks));
+              } catch (e) {
+                setCommitError(e instanceof Error ? e.message : String(e));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+          {commitError ? (
+            <Text style={styles.bulkError}>Commit failed: {commitError}</Text>
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -401,6 +426,8 @@ function OccurrenceSelector(props: {
 function BulkEditor(props: {
   tasks: GeneratedTask[];
   onApply: (patch: Partial<GeneratedTask>) => void;
+  /** Reports whether there are touched-but-unapplied fields. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const uniform = <K extends keyof GeneratedTask>(key: K): GeneratedTask[K] | undefined => {
     const first = props.tasks[0]?.[key];
@@ -415,7 +442,10 @@ function BulkEditor(props: {
   const [startTime, setStartTime] = useState<string>(uniform('startTime') ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const touch = (field: string) => setTouched((s) => new Set(s).add(field));
+  const touch = (field: string) => {
+    setTouched((s) => new Set(s).add(field));
+    props.onDirtyChange?.(true);
+  };
   const mixed = (key: keyof GeneratedTask) => uniform(key) === undefined && !touched.has(key);
 
   const apply = () => {

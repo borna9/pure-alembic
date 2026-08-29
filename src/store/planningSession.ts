@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   FlexibleDraft,
+  GeneratedTask,
   KnownDateDraft,
   PlanningSession,
   RoutineDraft,
@@ -24,6 +25,14 @@ export type WizardStep = (typeof WIZARD_STEPS)[number];
 interface SessionState extends PlanningSession {
   step: WizardStep;
   started: boolean;
+  /**
+   * Phase E review overlay (FR-24), persisted so edits survive step
+   * navigation and app restarts. Keyed by generated-task localId, which
+   * is deterministic for a given set of drafts; any draft or window
+   * change invalidates and clears the overlay.
+   */
+  reviewEdits: Record<string, Partial<GeneratedTask>>;
+  reviewRemoved: string[];
 
   start: () => void;
   reset: () => void;
@@ -41,9 +50,12 @@ interface SessionState extends PlanningSession {
   addSchedule: (d: FlexibleDraft) => void;
   addBlock: (d: FlexibleDraft) => void;
   removeDraft: (list: 'routineDrafts' | 'knownDrafts' | 'scheduleDrafts' | 'blockDrafts', localId: string) => void;
+
+  editReview: (localIds: string[], patch: Partial<GeneratedTask>) => void;
+  removeReview: (localIds: string[]) => void;
 }
 
-const emptySession: PlanningSession = {
+const emptySession: PlanningSession & Pick<SessionState, 'reviewEdits' | 'reviewRemoved'> = {
   windowStart: '',
   windowEnd: '',
   routineCategoryId: null,
@@ -54,7 +66,12 @@ const emptySession: PlanningSession = {
   knownDrafts: [],
   scheduleDrafts: [],
   blockDrafts: [],
+  reviewEdits: {},
+  reviewRemoved: [],
 };
+
+/** Draft/window changes shift generated ids — stale overlays must go. */
+const clearReview = { reviewEdits: {} as Record<string, Partial<GeneratedTask>>, reviewRemoved: [] as string[] };
 
 export const usePlanningSession = create<SessionState>()(
   persist(
@@ -75,14 +92,26 @@ export const usePlanningSession = create<SessionState>()(
         if (i > 0) set({ step: WIZARD_STEPS[i - 1] });
       },
 
-      setWindow: (windowStart, windowEnd) => set({ windowStart, windowEnd }),
+      setWindow: (windowStart, windowEnd) => set({ windowStart, windowEnd, ...clearReview }),
       setCategory: (phase, categoryId) => set({ [phase]: categoryId } as Partial<SessionState>),
-      addRoutine: (d) => set((s) => ({ routineDrafts: [...s.routineDrafts, d] })),
-      addKnown: (d) => set((s) => ({ knownDrafts: [...s.knownDrafts, d] })),
-      addSchedule: (d) => set((s) => ({ scheduleDrafts: [...s.scheduleDrafts, d] })),
-      addBlock: (d) => set((s) => ({ blockDrafts: [...s.blockDrafts, d] })),
+      addRoutine: (d) => set((s) => ({ routineDrafts: [...s.routineDrafts, d], ...clearReview })),
+      addKnown: (d) => set((s) => ({ knownDrafts: [...s.knownDrafts, d], ...clearReview })),
+      addSchedule: (d) => set((s) => ({ scheduleDrafts: [...s.scheduleDrafts, d], ...clearReview })),
+      addBlock: (d) => set((s) => ({ blockDrafts: [...s.blockDrafts, d], ...clearReview })),
       removeDraft: (list, localId) =>
-        set((s) => ({ [list]: s[list].filter((d) => d.localId !== localId) }) as Partial<SessionState>),
+        set(
+          (s) =>
+            ({ [list]: s[list].filter((d) => d.localId !== localId), ...clearReview }) as Partial<SessionState>
+        ),
+
+      editReview: (localIds, patch) =>
+        set((s) => {
+          const reviewEdits = { ...s.reviewEdits };
+          for (const id of localIds) reviewEdits[id] = { ...reviewEdits[id], ...patch };
+          return { reviewEdits };
+        }),
+      removeReview: (localIds) =>
+        set((s) => ({ reviewRemoved: [...new Set([...s.reviewRemoved, ...localIds])] })),
     }),
     { name: 'pure-alembic-session', storage: createJSONStorage(() => AsyncStorage) }
   )
