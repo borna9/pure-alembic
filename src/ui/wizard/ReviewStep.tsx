@@ -10,6 +10,7 @@ import { isWithin } from '../../logic/dates';
 import { generatePlan } from '../../logic/planGeneration';
 import { commitPlan, CommitResult } from '../../services/commitPlan';
 import { useDataStore } from '../../store/dataStore';
+import { FilterChip } from '../FilterChip';
 import { usePlanningSession } from '../../store/planningSession';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TextField, TimeField } from '../fields';
@@ -478,25 +479,6 @@ export function ReviewStep() {
   );
 }
 
-/** Toggle chip: active = hidden from the list, shown struck through. */
-function FilterChip(props: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={props.onPress}
-      style={[styles.filterChip, props.active && styles.filterChipActive]}
-    >
-      <Ionicons
-        name={props.active ? 'eye-off' : 'eye'}
-        size={14}
-        color={props.active ? '#fff' : colors.subtext}
-      />
-      <Text style={[styles.filterChipText, props.active && styles.filterChipTextActive]}>
-        {props.label}
-      </Text>
-    </Pressable>
-  );
-}
-
 /**
  * Actions on a repeating task's occurrences: select them all — or just
  * those in a date range — and jump straight into the bulk editor.
@@ -713,20 +695,6 @@ const styles = StyleSheet.create({
   filterTitle: { fontSize: 12, color: colors.subtext, marginBottom: 8 },
   filterGroup: { fontSize: 12, fontWeight: '700', color: colors.text, marginTop: 10, marginBottom: 6 },
   filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: colors.card,
-  },
-  filterChipActive: { backgroundColor: colors.subtext, borderColor: colors.subtext },
-  filterChipText: { fontSize: 12, color: colors.text },
-  filterChipTextActive: { color: '#fff', textDecorationLine: 'line-through' },
   bulkError: { fontSize: 13, color: colors.danger, marginBottom: 8 },
   rowHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   rowDate: { fontSize: 12, fontWeight: '700', color: colors.accent },

@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { pushTasksToServices } from '../providers/push';
 import { StoredTask, useDataStore } from '../store/dataStore';
 import { Button } from './fields';
+import { FilterChip } from './FilterChip';
 import { colors } from './theme';
 
 function confirmDialog(title: string, message: string, onConfirm: () => void) {
@@ -24,6 +25,8 @@ function confirmDialog(title: string, message: string, onConfirm: () => void) {
 
 export function DeliveryManager() {
   const tasks = useDataStore((s) => s.tasks);
+  const tags = useDataStore((s) => s.tags);
+  const categories = useDataStore((s) => s.categories);
   const deleteTask = useDataStore((s) => s.deleteTask);
 
   const undelivered = useMemo(
@@ -38,21 +41,50 @@ export function DeliveryManager() {
   const [initialized, setInitialized] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Same show/hide filters as the Review step. A task's categories are
+  // those of its tags (DR-4). Hidden tasks leave the selection, so what
+  // is checked is exactly what gets sent.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [hideRoutines, setHideRoutines] = useState(false);
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
+
+  const isHidden = (t: StoredTask) =>
+    (hideRoutines && t.taskType === 'Daily routine') ||
+    (t.tagIds ?? []).some(
+      (id) => hiddenTags.has(id) || hiddenCategories.has(tags[id]?.categoryId ?? '')
+    );
+  const visible = useMemo(
+    () => undelivered.filter((t) => !isHidden(t)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [undelivered, hideRoutines, hiddenCategories, hiddenTags, tags]
+  );
+  const hiddenCount = undelivered.length - visible.length;
+
+  // Filter options come from the pending tasks themselves.
+  const pendingTagIds = useMemo(
+    () => [...new Set(undelivered.flatMap((t) => t.tagIds ?? []))].filter((id) => tags[id] && !tags[id]._deleted),
+    [undelivered, tags]
+  );
+  const pendingCategoryIds = useMemo(
+    () => [...new Set(pendingTagIds.map((id) => tags[id]?.categoryId).filter((c): c is string => Boolean(c)))],
+    [pendingTagIds, tags]
+  );
 
   // Default to everything selected once the store has loaded; afterwards
-  // only prune ids that disappeared (sent or deleted).
+  // prune ids that disappeared (sent or deleted) or became hidden.
   useEffect(() => {
     if (!initialized && undelivered.length > 0) {
-      setSelected(new Set(undelivered.map((t) => t.id)));
+      setSelected(new Set(visible.map((t) => t.id)));
       setInitialized(true);
     } else {
       setSelected((s) => {
-        const ids = new Set(undelivered.map((t) => t.id));
+        const ids = new Set(visible.map((t) => t.id));
         return new Set([...s].filter((id) => ids.has(id)));
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [undelivered.length]);
+  }, [undelivered.length, visible.length]);
 
   if (undelivered.length === 0) {
     return (
@@ -74,7 +106,7 @@ export function DeliveryManager() {
     setBusy(true);
     setMessage(null);
     try {
-      const toSend = undelivered.filter((t) => selected.has(t.id));
+      const toSend = visible.filter((t) => selected.has(t.id));
       const r = await pushTasksToServices(toSend, (done, total) =>
         setMessage(`Sending ${done} of ${total}…`)
       );
@@ -105,22 +137,90 @@ export function DeliveryManager() {
         <Pressable
           onPress={() =>
             setSelected(
-              selected.size === undelivered.length
-                ? new Set()
-                : new Set(undelivered.map((t) => t.id))
+              selected.size === visible.length ? new Set() : new Set(visible.map((t) => t.id))
             )
           }
         >
           <Text style={styles.selectAll}>
-            {selected.size === undelivered.length ? 'Clear all' : 'Select all'}
+            {selected.size === visible.length ? 'Clear all' : 'Select all'}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.filterButton, (filtersOpen || hiddenCount > 0) && styles.filterButtonActive]}
+          onPress={() => setFiltersOpen(!filtersOpen)}
+        >
+          <Ionicons
+            name="funnel-outline"
+            size={14}
+            color={filtersOpen || hiddenCount > 0 ? '#fff' : colors.accent}
+          />
+          <Text style={[styles.filterButtonText, (filtersOpen || hiddenCount > 0) && styles.filterButtonTextActive]}>
+            {hiddenCount > 0 ? `Filters (${hiddenCount} hidden)` : 'Filters'}
           </Text>
         </Pressable>
         <Text style={styles.count}>
-          {selected.size} of {undelivered.length} selected
+          {selected.size} of {visible.length} selected
         </Text>
       </View>
 
-      {undelivered.map((t) => (
+      {filtersOpen && (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterTitle}>Hidden tasks are not sent and not deleted</Text>
+          <View style={styles.filterChips}>
+            <FilterChip
+              label="Daily routines"
+              active={hideRoutines}
+              onPress={() => setHideRoutines(!hideRoutines)}
+            />
+          </View>
+          {pendingCategoryIds.length > 0 && (
+            <>
+              <Text style={styles.filterGroup}>Categories</Text>
+              <View style={styles.filterChips}>
+                {pendingCategoryIds.map((id) => (
+                  <FilterChip
+                    key={id}
+                    label={categories[id]?.name ?? 'Unknown'}
+                    active={hiddenCategories.has(id)}
+                    onPress={() =>
+                      setHiddenCategories((s) => {
+                        const next = new Set(s);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
+          {pendingTagIds.length > 0 && (
+            <>
+              <Text style={styles.filterGroup}>Tags</Text>
+              <View style={styles.filterChips}>
+                {pendingTagIds.map((id) => (
+                  <FilterChip
+                    key={id}
+                    label={tags[id]?.name ?? 'Unknown'}
+                    active={hiddenTags.has(id)}
+                    onPress={() =>
+                      setHiddenTags((s) => {
+                        const next = new Set(s);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+      )}
+
+      {visible.map((t) => (
         <Row key={t.id} task={t} selected={selected.has(t.id)} onToggle={() => toggle(t.id)} />
       ))}
 
@@ -171,9 +271,27 @@ function Row(props: { task: StoredTask; selected: boolean; onToggle: () => void 
 }
 
 const styles = StyleSheet.create({
-  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   selectAll: { fontSize: 13, fontWeight: '600', color: colors.accent },
-  count: { fontSize: 12, color: colors.subtext },
+  count: { fontSize: 12, color: colors.subtext, marginLeft: 'auto' },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.card,
+  },
+  filterButtonActive: { backgroundColor: colors.accent },
+  filterButtonText: { fontSize: 12, fontWeight: '600', color: colors.accent },
+  filterButtonTextActive: { color: '#fff' },
+  filterPanel: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 10 },
+  filterTitle: { fontSize: 12, color: colors.subtext, marginBottom: 8 },
+  filterGroup: { fontSize: 12, fontWeight: '700', color: colors.text, marginTop: 10, marginBottom: 6 },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 6 },
   checkbox: { marginRight: 8 },
   texts: { flex: 1, minWidth: 0 },
