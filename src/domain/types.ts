@@ -49,6 +49,8 @@ export interface Task {
   startTime?: TimeOfDay | null;
   /** URL of the linked calendar event or reminder (FR-28). */
   externalLink?: string | null;
+  /** Provider-side id of the linked item, for two-way sync. */
+  externalId?: string | null;
   /** Links preparation/follow-up tasks (FR-9/FR-10) to their originating task. */
   parentTaskId?: string | null;
 }

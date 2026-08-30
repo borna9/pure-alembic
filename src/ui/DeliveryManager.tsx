@@ -8,6 +8,7 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { pushTasksToServices } from '../providers/push';
 import { StoredTask, useDataStore } from '../store/dataStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { Button } from './fields';
 import { FilterChip } from './FilterChip';
 import { colors } from './theme';
@@ -21,6 +22,43 @@ function confirmDialog(title: string, message: string, onConfirm: () => void) {
       { text: 'Delete', style: 'destructive', onPress: onConfirm },
     ]);
   }
+}
+
+/** Two-way calendar sync button (v1: Google Calendar). */
+export function CalendarPullButton() {
+  const calendarService = useSettingsStore((s) => s.calendarService);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  if (calendarService !== 'google') return null;
+
+  return (
+    <View style={styles.pullBlock}>
+      <Button
+        title={busy ? 'Checking calendar…' : 'Pull changes from calendar'}
+        kind="secondary"
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          setMessage(null);
+          try {
+            const { pullCalendarChanges } = await import('../services/calendarPull');
+            const r = await pullCalendarChanges((done, total) =>
+              setMessage(`Checking ${done} of ${total}…`)
+            );
+            setMessage(
+              `${r.updated} task${r.updated === 1 ? '' : 's'} updated from calendar, ${r.deletedInApp} deleted here, ${r.deletedInCalendar} event${r.deletedInCalendar === 1 ? '' : 's'} removed from calendar.` +
+                (r.errors.length ? ` ${r.errors.length} failed: ${r.errors[0]}` : '')
+            );
+          } catch (e) {
+            setMessage(e instanceof Error ? e.message : String(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+    </View>
+  );
 }
 
 export function DeliveryManager() {
@@ -301,4 +339,5 @@ const styles = StyleSheet.create({
   action: { flex: 1 },
   message: { fontSize: 13, color: colors.accent, marginTop: 10, lineHeight: 18 },
   empty: { fontSize: 13, color: colors.subtext, lineHeight: 18 },
+  pullBlock: { marginBottom: 14 },
 });

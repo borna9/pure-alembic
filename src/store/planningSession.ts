@@ -11,6 +11,7 @@ import type {
   PlanningSession,
   RoutineDraft,
 } from '../domain/planning';
+import { FieldClock, stampClock } from '../sync/fieldClock';
 
 export const WIZARD_STEPS = [
   'window',
@@ -25,6 +26,10 @@ export type WizardStep = (typeof WIZARD_STEPS)[number];
 interface SessionState extends PlanningSession {
   step: WizardStep;
   started: boolean;
+  /** Field-modification clock for cross-device session sync. */
+  _clock: FieldClock;
+  /** Cloud row id of this user's session record (adopted on first sync). */
+  cloudId: string | null;
   /**
    * Phase E review overlay (FR-24), persisted so edits survive step
    * navigation and app restarts. Keyed by generated-task localId, which
@@ -75,44 +80,49 @@ const clearReview = { reviewEdits: {} as Record<string, Partial<GeneratedTask>>,
 
 export const usePlanningSession = create<SessionState>()(
   persist(
-    (set, get) => ({
-      ...emptySession,
-      step: 'window',
-      started: false,
+    (set, get) => {
+      // Every user mutation stamps the touched fields so the session can
+      // field-merge across devices like any other synced record.
+      const mutate = (patch: Partial<SessionState>) =>
+        set({ ...patch, _clock: stampClock(get()._clock, patch) } as Partial<SessionState>);
 
-      start: () => set({ ...emptySession, step: 'window', started: true }),
-      reset: () => set({ ...emptySession, step: 'window', started: false }),
-      goTo: (step) => set({ step }),
-      next: () => {
-        const i = WIZARD_STEPS.indexOf(get().step);
-        if (i < WIZARD_STEPS.length - 1) set({ step: WIZARD_STEPS[i + 1] });
-      },
-      back: () => {
-        const i = WIZARD_STEPS.indexOf(get().step);
-        if (i > 0) set({ step: WIZARD_STEPS[i - 1] });
-      },
+      return {
+        ...emptySession,
+        step: 'window',
+        started: false,
+        _clock: {},
+        cloudId: null,
 
-      setWindow: (windowStart, windowEnd) => set({ windowStart, windowEnd, ...clearReview }),
-      setCategory: (phase, categoryId) => set({ [phase]: categoryId } as Partial<SessionState>),
-      addRoutine: (d) => set((s) => ({ routineDrafts: [...s.routineDrafts, d], ...clearReview })),
-      addKnown: (d) => set((s) => ({ knownDrafts: [...s.knownDrafts, d], ...clearReview })),
-      addSchedule: (d) => set((s) => ({ scheduleDrafts: [...s.scheduleDrafts, d], ...clearReview })),
-      addBlock: (d) => set((s) => ({ blockDrafts: [...s.blockDrafts, d], ...clearReview })),
-      removeDraft: (list, localId) =>
-        set(
-          (s) =>
-            ({ [list]: s[list].filter((d) => d.localId !== localId), ...clearReview }) as Partial<SessionState>
-        ),
+        start: () => mutate({ ...emptySession, step: 'window', started: true }),
+        reset: () => mutate({ ...emptySession, step: 'window', started: false }),
+        goTo: (step) => mutate({ step }),
+        next: () => {
+          const i = WIZARD_STEPS.indexOf(get().step);
+          if (i < WIZARD_STEPS.length - 1) mutate({ step: WIZARD_STEPS[i + 1] });
+        },
+        back: () => {
+          const i = WIZARD_STEPS.indexOf(get().step);
+          if (i > 0) mutate({ step: WIZARD_STEPS[i - 1] });
+        },
 
-      editReview: (localIds, patch) =>
-        set((s) => {
-          const reviewEdits = { ...s.reviewEdits };
+        setWindow: (windowStart, windowEnd) => mutate({ windowStart, windowEnd, ...clearReview }),
+        setCategory: (phase, categoryId) => mutate({ [phase]: categoryId } as Partial<SessionState>),
+        addRoutine: (d) => mutate({ routineDrafts: [...get().routineDrafts, d], ...clearReview }),
+        addKnown: (d) => mutate({ knownDrafts: [...get().knownDrafts, d], ...clearReview }),
+        addSchedule: (d) => mutate({ scheduleDrafts: [...get().scheduleDrafts, d], ...clearReview }),
+        addBlock: (d) => mutate({ blockDrafts: [...get().blockDrafts, d], ...clearReview }),
+        removeDraft: (list, localId) =>
+          mutate({ [list]: get()[list].filter((d) => d.localId !== localId), ...clearReview } as Partial<SessionState>),
+
+        editReview: (localIds, patch) => {
+          const reviewEdits = { ...get().reviewEdits };
           for (const id of localIds) reviewEdits[id] = { ...reviewEdits[id], ...patch };
-          return { reviewEdits };
-        }),
-      removeReview: (localIds) =>
-        set((s) => ({ reviewRemoved: [...new Set([...s.reviewRemoved, ...localIds])] })),
-    }),
+          mutate({ reviewEdits });
+        },
+        removeReview: (localIds) =>
+          mutate({ reviewRemoved: [...new Set([...get().reviewRemoved, ...localIds])] }),
+      };
+    },
     { name: 'pure-alembic-session', storage: createJSONStorage(() => AsyncStorage) }
   )
 );

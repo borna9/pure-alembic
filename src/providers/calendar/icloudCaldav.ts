@@ -5,5 +5,8 @@ import type { CalendarProvider } from '../types';
 import { createCaldavEvent } from '../caldav';
 
 export const icloudCaldavCalendarProvider: CalendarProvider = {
-  createEvent: (spec) => createCaldavEvent(spec),
+  async createEvent(spec) {
+    const url = await createCaldavEvent(spec);
+    return { url, id: url };
+  },
 };

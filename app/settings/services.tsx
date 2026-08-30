@@ -9,7 +9,7 @@ import {
   useSettingsStore,
 } from '../../src/store/settingsStore';
 import { clearConnection, ConnectionKey, isConnected } from '../../src/providers/connections';
-import { DeliveryManager } from '../../src/ui/DeliveryManager';
+import { CalendarPullButton, DeliveryManager } from '../../src/ui/DeliveryManager';
 import { connectCaldav, connectService } from '../../src/providers/connect';
 import { Button, Field, TextField } from '../../src/ui/fields';
 import { colors } from '../../src/ui/theme';
@@ -111,6 +111,7 @@ export default function ServicesSettings() {
         delete stale test tasks, and send the rest. Dated tasks with hours become calendar events;
         daily routines and undated/zero-hour tasks become reminders.
       </Text>
+      <CalendarPullButton />
       <DeliveryManager />
     </ScrollView>
   );

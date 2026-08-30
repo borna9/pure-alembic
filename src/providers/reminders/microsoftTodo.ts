@@ -37,6 +37,6 @@ export const microsoftTodoReminderProvider: ReminderProvider = {
     );
     if (!res.ok) throw new Error(`Microsoft To Do: ${res.status} ${await res.text()}`);
     const task = (await res.json()) as { id: string };
-    return `https://to-do.office.com/tasks/id/${task.id}/details`;
+    return { url: `https://to-do.office.com/tasks/id/${task.id}/details`, id: task.id };
   },
 };

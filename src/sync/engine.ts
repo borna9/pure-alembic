@@ -9,7 +9,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { newId } from '../lib/id';
 import { useDataStore } from '../store/dataStore';
+import { usePlanningSession } from '../store/planningSession';
 import { useSettingsStore } from '../store/settingsStore';
 import { getSupabase, isBackendConfigured } from '../supabase/client';
 import type { Clocked, FieldClock } from './fieldClock';
@@ -143,7 +145,92 @@ export async function syncNow(): Promise<SyncResult> {
     meta.setLastSyncAt(table, syncStartedAt);
   }
 
+  await syncPlanningSession(supabase, userId, result);
+
   return result;
+}
+
+// The in-progress planning session syncs as a single record so a session
+// started on one device can be continued on another. Same-field edits
+// from two devices resolve last-writer-wins per field (it is transient
+// working state, so no conflict UI).
+const SESSION_FIELDS = [
+  'windowStart',
+  'windowEnd',
+  'routineCategoryId',
+  'knownCategoryId',
+  'scheduleCategoryId',
+  'blockCategoryId',
+  'routineDrafts',
+  'knownDrafts',
+  'scheduleDrafts',
+  'blockDrafts',
+  'reviewEdits',
+  'reviewRemoved',
+  'step',
+  'started',
+] as const;
+
+async function syncPlanningSession(
+  supabase: ReturnType<typeof getSupabase>,
+  userId: string,
+  result: SyncResult
+): Promise<void> {
+  const meta = useSyncMeta.getState();
+  const lastSyncAt = meta.lastSyncAt['planning_sessions'] ?? EPOCH;
+  const syncStartedAt = new Date().toISOString();
+
+  const s = usePlanningSession.getState();
+  const localFields: Record<string, unknown> = {};
+  for (const f of SESSION_FIELDS) localFields[f] = s[f];
+  const local = { fields: localFields, clock: s._clock ?? {} };
+
+  const { data: rows, error } = await supabase
+    .from('planning_sessions')
+    .select('id, data, clock')
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`Pull planning session: ${error.message}`);
+  const remoteRow = rows?.[0];
+  const cloudId = remoteRow?.id ?? s.cloudId ?? newId();
+
+  let merged = local;
+  if (remoteRow) {
+    const remote = {
+      fields: remoteRow.data as Record<string, unknown>,
+      clock: (remoteRow.clock as FieldClock) ?? {},
+    };
+    const outcome = mergeRecord(local, remote, lastSyncAt);
+    // LWW: on a same-field conflict the newer edit wins outright.
+    for (const c of outcome.conflicts) {
+      if (c.remoteAt > c.localAt) {
+        outcome.merged.fields[c.field] = c.remoteValue;
+        outcome.merged.clock[c.field] = c.remoteAt;
+      }
+    }
+    merged = outcome.merged;
+    if (JSON.stringify(merged.fields) !== JSON.stringify(localFields)) {
+      usePlanningSession.setState({ ...(merged.fields as object), _clock: merged.clock, cloudId });
+      result.pulled++;
+    }
+  }
+  if (s.cloudId !== cloudId) usePlanningSession.setState({ cloudId });
+
+  const remoteData = remoteRow ? JSON.stringify(remoteRow.data) : null;
+  if (remoteData !== JSON.stringify(merged.fields)) {
+    const { error: pushError } = await supabase.from('planning_sessions').upsert({
+      id: cloudId,
+      user_id: userId,
+      data: merged.fields,
+      clock: merged.clock,
+      deleted: false,
+      updated_at: new Date().toISOString(),
+    });
+    if (pushError) throw new Error(`Push planning session: ${pushError.message}`);
+    result.pushed++;
+  }
+
+  meta.setLastSyncAt('planning_sessions', syncStartedAt);
 }
 
 function localRecords(table: TableName): Map<string, Clocked & { id: string }> {

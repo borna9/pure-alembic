@@ -6,6 +6,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { getSupabase } from '../supabase/client';
+import { useSettingsStore } from '../store/settingsStore';
 import { syncNow } from '../sync/engine';
 import { Button } from '../ui/fields';
 import { colors } from '../ui/theme';
@@ -82,7 +83,18 @@ export function SignedInAccount({ session }: { session: Session }) {
       <View style={styles.button}>
         <Button title={busy ? 'Working…' : 'Sync now'} disabled={busy} onPress={() => run(async () => {
           const r = await syncNow();
-          return `Synced: ${r.pushed} pushed, ${r.pulled} pulled${r.conflicts > 0 ? `, ${r.conflicts} conflicts to resolve` : ''}`;
+          let msg = `Synced: ${r.pushed} pushed, ${r.pulled} pulled${r.conflicts > 0 ? `, ${r.conflicts} conflicts to resolve` : ''}`;
+          // Two-way calendar sync rides along when Google Calendar is active.
+          if (useSettingsStore.getState().calendarService === 'google') {
+            try {
+              const { pullCalendarChanges } = await import('../services/calendarPull');
+              const c = await pullCalendarChanges();
+              msg += `. Calendar: ${c.updated} updated, ${c.deletedInApp} removed here, ${c.deletedInCalendar} removed there${c.errors.length ? `, ${c.errors.length} failed` : ''}`;
+            } catch (e) {
+              msg += `. Calendar pull failed: ${e instanceof Error ? e.message : String(e)}`;
+            }
+          }
+          return msg;
         })} />
       </View>
 

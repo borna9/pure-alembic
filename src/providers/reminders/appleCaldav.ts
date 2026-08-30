@@ -5,5 +5,8 @@ import type { ReminderProvider } from '../types';
 import { createCaldavTodo } from '../caldav';
 
 export const appleCaldavReminderProvider: ReminderProvider = {
-  createReminder: (spec) => createCaldavTodo(spec),
+  async createReminder(spec) {
+    const url = await createCaldavTodo(spec);
+    return { url, id: url };
+  },
 };

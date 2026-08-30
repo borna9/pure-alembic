@@ -65,22 +65,28 @@ export async function pushTasksToServices(
         // FR-26: no start time → first available time from the app's own
         // records for that day (external calendars ignored); 09:00 fallback.
         const start = task.startTime ?? firstAvailableTime(data.busyItemsOn(task.dueDate), task.hours);
-        const url = await calendar.createEvent({
+        const created = await calendar.createEvent({
           title: task.description,
           date: task.dueDate,
           startTime: start,
           hours: task.hours,
           notes: taskNotes(task),
         });
-        if (url) {
-          data.updateTask(task.id, { externalLink: url }); // FR-28
+        if (created.url || created.id) {
+          data.updateTask(task.id, {
+            externalLink: created.url ?? created.id, // FR-28
+            externalId: created.id,
+          });
           if (!task.startTime) data.updateTask(task.id, { startTime: start });
           summary.calendarEvents++;
         }
       } else if (deliveryTarget(task) === 'reminder' && reminder) {
-        const url = await reminder.createReminder({ title: task.description, notes: taskNotes(task) });
-        if (url) {
-          data.updateTask(task.id, { externalLink: url }); // FR-28
+        const created = await reminder.createReminder({ title: task.description, notes: taskNotes(task) });
+        if (created.url || created.id) {
+          data.updateTask(task.id, {
+            externalLink: created.url ?? created.id, // FR-28
+            externalId: created.id,
+          });
           summary.reminders++;
         }
       }

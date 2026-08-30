@@ -20,6 +20,6 @@ export const appleEventKitReminderProvider: ReminderProvider = {
       title: spec.title,
       notes: spec.notes,
     });
-    return `eventkit-reminder:${reminderId}`;
+    return { url: `eventkit-reminder:${reminderId}`, id: reminderId };
   },
 };

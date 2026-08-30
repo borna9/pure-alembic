@@ -14,12 +14,19 @@ export interface ReminderSpec {
   notes: string;
 }
 
+export interface CreatedItem {
+  /** Human-facing URL of the created item (FR-28). */
+  url: string | null;
+  /** Provider-side id, kept for two-way sync where supported. */
+  id: string | null;
+}
+
 export interface CalendarProvider {
-  /** Create an event and return its URL/identifier (IF-2, FR-28). */
-  createEvent(spec: CalendarEventSpec): Promise<string | null>;
+  /** Create an event and return its URL and id (IF-2, FR-28). */
+  createEvent(spec: CalendarEventSpec): Promise<CreatedItem>;
 }
 
 export interface ReminderProvider {
-  /** Create a reminder task and return its URL/identifier (IF-2, FR-28). */
-  createReminder(spec: ReminderSpec): Promise<string | null>;
+  /** Create a reminder task and return its URL and id (IF-2, FR-28). */
+  createReminder(spec: ReminderSpec): Promise<CreatedItem>;
 }

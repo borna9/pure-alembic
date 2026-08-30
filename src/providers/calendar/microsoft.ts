@@ -21,6 +21,6 @@ export const microsoftCalendarProvider: CalendarProvider = {
     });
     if (!res.ok) throw new Error(`Outlook Calendar: ${res.status} ${await res.text()}`);
     const event = (await res.json()) as { webLink?: string; id: string };
-    return event.webLink ?? event.id;
+    return { url: event.webLink ?? null, id: event.id };
   },
 };

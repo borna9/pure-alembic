@@ -22,6 +22,6 @@ export const appleEventKitCalendarProvider: CalendarProvider = {
       endDate: toLocalDate(spec.date, endTimeFrom(spec.startTime, spec.hours)),
     });
     // EventKit has no shareable URL; the identifier satisfies IF-2/FR-28.
-    return `eventkit:${eventId}`;
+    return { url: `eventkit:${eventId}`, id: eventId };
   },
 };
