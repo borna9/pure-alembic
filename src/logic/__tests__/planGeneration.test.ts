@@ -185,6 +185,40 @@ describe('generatePlan — Phases C/D (FR-16..FR-23)', () => {
     expect(tasks).toHaveLength(1); // only 2026-07-01 fits in the 7-day window
   });
 
+  it('weekly known-date tasks can anchor on a start date with a count (Phase B)', () => {
+    const known: KnownDateDraft = {
+      localId: 'k2',
+      description: 'Check-in',
+      taskType: 'Scheduled',
+      mode: 'weekly',
+      startDate: '2026-07-03',
+      occurrenceCount: 3,
+      ...baseDraft,
+    };
+    const { tasks } = generatePlan(
+      { ...emptySession, windowEnd: '2026-08-31', knownDrafts: [known] },
+      24
+    );
+    expect(tasks.map((t) => t.dueDate)).toEqual(['2026-07-03', '2026-07-10', '2026-07-17']);
+  });
+
+  it('monthly known-date tasks can anchor on a start date with a count (Phase B)', () => {
+    const known: KnownDateDraft = {
+      localId: 'k3',
+      description: 'Rent',
+      taskType: 'Scheduled',
+      mode: 'monthly',
+      startDate: '2026-07-05',
+      occurrenceCount: 2,
+      ...baseDraft,
+    };
+    const { tasks } = generatePlan(
+      { ...emptySession, windowEnd: '2026-12-31', knownDrafts: [known] },
+      24
+    );
+    expect(tasks.map((t) => t.dueDate)).toEqual(['2026-07-05', '2026-08-05']);
+  });
+
   it('caps weekly known-date tasks at the requested occurrence count (Phase B)', () => {
     const known: KnownDateDraft = {
       localId: 'k1',

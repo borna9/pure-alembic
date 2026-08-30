@@ -273,15 +273,23 @@ function knownDateInstances(
       if (!draft.dueDate) return [];
       return [{ dueDate: draft.dueDate }];
     case 'weekly': {
-      // FR-14c: one instance per qualifying weekday in the window.
-      if (draft.weekday == null) return [];
-      const days = expandWeeklyByWeekday(session.windowStart, session.windowEnd, draft.weekday);
+      // FR-14c: one instance per qualifying weekday in the window. With a
+      // start date, occurrences instead run weekly from that date.
+      const days = draft.startDate
+        ? expandRepeat(draft.startDate, session.windowEnd, 'Weekly')
+        : draft.weekday != null
+          ? expandWeeklyByWeekday(session.windowStart, session.windowEnd, draft.weekday)
+          : [];
       return capOccurrences(days, draft.occurrenceCount).map((d) => ({ dueDate: d }));
     }
     case 'monthly': {
       // FR-14d: one instance per qualifying day of month in the window.
-      if (draft.dayOfMonth == null) return [];
-      const days = expandMonthlyByDay(session.windowStart, session.windowEnd, draft.dayOfMonth);
+      // With a start date, occurrences run monthly from that date.
+      const days = draft.startDate
+        ? expandRepeat(draft.startDate, session.windowEnd, 'Monthly')
+        : draft.dayOfMonth != null
+          ? expandMonthlyByDay(session.windowStart, session.windowEnd, draft.dayOfMonth)
+          : [];
       return capOccurrences(days, draft.occurrenceCount).map((d) => ({ dueDate: d }));
     }
   }

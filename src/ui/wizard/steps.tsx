@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { FlexibleDraft, KnownDateDraft, KnownDateMode } from '../../domain/planning';
 import { REPEAT_INTERVALS, RepeatInterval, TASK_TYPES, TaskType } from '../../domain/types';
-import { compareDates, isWithin } from '../../logic/dates';
+import { addDays, compareDates, isWithin } from '../../logic/dates';
 import { usePlanningSession } from '../../store/planningSession';
 import { CategoryPicker } from '../CategoryPicker';
 import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TimeField } from '../fields';
@@ -101,22 +101,37 @@ export function KnownStep() {
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [startTime, setStartTime] = useState('');
   const [knownOccurrences, setKnownOccurrences] = useState(0); // 0 = whole window
+  // Range: define the end by date or by a number of days from the start.
+  const [rangeBound, setRangeBound] = useState<'End date' | 'Number of days'>('End date');
+  const [rangeDays, setRangeDays] = useState(0);
+  // Weekly/monthly: recur across the whole window, or from a start date.
+  const [anchorFromDate, setAnchorFromDate] = useState(false);
+  const [anchorDate, setAnchorDate] = useState('');
 
   const inWindow = (d: string) => isValidDate(d) && isWithin(d, s.windowStart, s.windowEnd);
+  const rangeByDays = mode === 'range' && rangeBound === 'Number of days';
+  const rangeEnd = rangeByDays ? (isValidDate(startDate) ? addDays(startDate, Math.max(1, Math.round(rangeDays)) - 1) : '') : endDate;
 
   const validate = (): string | null => {
     if (startTime && !isValidTime(startTime)) return 'Start time must be HH:MM.';
     switch (mode) {
       case 'range':
-        if (!inWindow(startDate) || !inWindow(endDate)) return 'Start and end dates must be valid and inside the planning window (FR-4).';
-        if (compareDates(startDate, endDate) > 0) return 'Start date must not be after the end date.';
+        if (!inWindow(startDate)) return 'Start date must be valid and inside the planning window (FR-4).';
+        if (rangeByDays && Math.round(rangeDays) < 1) return 'Enter how many days the task spans (at least 1).';
+        if (!inWindow(rangeEnd)) return rangeByDays
+          ? 'That many days runs past the planning window (FR-4).'
+          : 'End date must be valid and inside the planning window (FR-4).';
+        if (compareDates(startDate, rangeEnd) > 0) return 'Start date must not be after the end date.';
         return null;
       case 'dueOnly':
         return inWindow(dueDate) ? null : 'Due date must be valid and inside the planning window (FR-4).';
       case 'weekly':
-        return null;
       case 'monthly':
-        return dayOfMonth >= 1 && dayOfMonth <= 31 ? null : 'Day of month must be 1–31.';
+        if (anchorFromDate) {
+          return inWindow(anchorDate) ? null : 'Start date must be valid and inside the planning window (FR-4).';
+        }
+        if (mode === 'monthly' && (dayOfMonth < 1 || dayOfMonth > 31)) return 'Day of month must be 1–31.';
+        return null;
     }
   };
 
@@ -136,20 +151,19 @@ export function KnownStep() {
         categoryId={s.knownCategoryId}
         validate={validate}
         onAdd={(base) => {
+          const recurring = mode === 'weekly' || mode === 'monthly';
           const draft: KnownDateDraft = {
             ...base,
             taskType,
             mode,
-            startDate: mode === 'range' ? startDate : undefined,
-            endDate: mode === 'range' ? endDate : undefined,
+            startDate:
+              mode === 'range' ? startDate : recurring && anchorFromDate ? anchorDate : undefined,
+            endDate: mode === 'range' ? rangeEnd : undefined,
             dueDate: mode === 'dueOnly' ? dueDate : undefined,
-            weekday: mode === 'weekly' ? WEEKDAYS.indexOf(weekday) : undefined,
-            dayOfMonth: mode === 'monthly' ? dayOfMonth : undefined,
+            weekday: mode === 'weekly' && !anchorFromDate ? WEEKDAYS.indexOf(weekday) : undefined,
+            dayOfMonth: mode === 'monthly' && !anchorFromDate ? dayOfMonth : undefined,
             startTime: startTime || undefined,
-            occurrenceCount:
-              (mode === 'weekly' || mode === 'monthly') && knownOccurrences >= 1
-                ? Math.round(knownOccurrences)
-                : undefined,
+            occurrenceCount: recurring && knownOccurrences >= 1 ? Math.round(knownOccurrences) : undefined,
           };
           s.addKnown(draft);
           setStartDate('');
@@ -157,6 +171,8 @@ export function KnownStep() {
           setDueDate('');
           setStartTime('');
           setKnownOccurrences(0);
+          setRangeDays(0);
+          setAnchorDate('');
         }}
       >
         <Field label="Dates">
@@ -167,38 +183,78 @@ export function KnownStep() {
           />
         </Field>
         {mode === 'range' && (
-          <View style={styles.pair}>
-            <View style={styles.half}>
-              <Field label="Start date">
-                <DateField value={startDate} onChange={setStartDate} minDate={s.windowStart} maxDate={s.windowEnd} />
-              </Field>
+          <>
+            <Field label="Range ends by">
+              <Segmented
+                options={['End date', 'Number of days'] as const}
+                value={rangeBound}
+                onChange={setRangeBound}
+              />
+            </Field>
+            <View style={styles.pair}>
+              <View style={styles.half}>
+                <Field label="Start date">
+                  <DateField value={startDate} onChange={setStartDate} minDate={s.windowStart} maxDate={s.windowEnd} />
+                </Field>
+              </View>
+              <View style={styles.half}>
+                {rangeByDays ? (
+                  <Field label="Days">
+                    <NumberField value={rangeDays} onChange={setRangeDays} placeholder="e.g. 5" />
+                  </Field>
+                ) : (
+                  <Field label="End date">
+                    <DateField value={endDate} onChange={setEndDate} minDate={s.windowStart} maxDate={s.windowEnd} />
+                  </Field>
+                )}
+              </View>
             </View>
-            <View style={styles.half}>
-              <Field label="End date">
-                <DateField value={endDate} onChange={setEndDate} minDate={s.windowStart} maxDate={s.windowEnd} />
-              </Field>
-            </View>
-          </View>
+            {rangeByDays && rangeEnd ? (
+              <Text style={styles.computedNote}>Ends {rangeEnd}</Text>
+            ) : null}
+          </>
         )}
         {mode === 'dueOnly' && (
           <Field label="Due date">
             <DateField value={dueDate} onChange={setDueDate} minDate={s.windowStart} maxDate={s.windowEnd} />
           </Field>
         )}
-        {mode === 'weekly' && (
-          <Field label="Day of the week">
-            <Segmented options={WEEKDAYS} value={weekday} onChange={setWeekday} />
-          </Field>
-        )}
-        {mode === 'monthly' && (
-          <Field label="Day of the month (1–31)">
-            <NumberField value={dayOfMonth} onChange={(v) => setDayOfMonth(Math.round(v))} />
-          </Field>
-        )}
         {(mode === 'weekly' || mode === 'monthly') && (
-          <Field label="Number of occurrences (optional — empty covers the whole window)">
-            <NumberField value={knownOccurrences} onChange={setKnownOccurrences} placeholder="all" />
-          </Field>
+          <>
+            <Field label="Repeats">
+              <Segmented
+                options={
+                  mode === 'weekly'
+                    ? (['On a weekday', 'From a start date'] as const)
+                    : (['On a day of month', 'From a start date'] as const)
+                }
+                value={
+                  anchorFromDate
+                    ? 'From a start date'
+                    : mode === 'weekly'
+                      ? 'On a weekday'
+                      : 'On a day of month'
+                }
+                onChange={(v) => setAnchorFromDate(v === 'From a start date')}
+              />
+            </Field>
+            {anchorFromDate ? (
+              <Field label="First occurrence">
+                <DateField value={anchorDate} onChange={setAnchorDate} minDate={s.windowStart} maxDate={s.windowEnd} />
+              </Field>
+            ) : mode === 'weekly' ? (
+              <Field label="Day of the week">
+                <Segmented options={WEEKDAYS} value={weekday} onChange={setWeekday} />
+              </Field>
+            ) : (
+              <Field label="Day of the month (1–31)">
+                <NumberField value={dayOfMonth} onChange={(v) => setDayOfMonth(Math.round(v))} />
+              </Field>
+            )}
+            <Field label="Number of occurrences (optional — empty covers the whole window)">
+              <NumberField value={knownOccurrences} onChange={setKnownOccurrences} placeholder="all" />
+            </Field>
+          </>
         )}
         <Field label="Start time (optional)">
           <TimeField value={startTime} onChange={setStartTime} />
@@ -218,9 +274,9 @@ function describeKnown(d: KnownDateDraft): string {
     case 'dueOnly':
       return `due ${d.dueDate}`;
     case 'weekly':
-      return `every ${WEEKDAYS[d.weekday ?? 0]}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
+      return `${d.startDate ? `weekly from ${d.startDate}` : `every ${WEEKDAYS[d.weekday ?? 0]}`}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
     case 'monthly':
-      return `monthly on day ${d.dayOfMonth}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
+      return `${d.startDate ? `monthly from ${d.startDate}` : `monthly on day ${d.dayOfMonth}`}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
   }
 }
 
@@ -343,4 +399,5 @@ const styles = StyleSheet.create({
   pair: { flexDirection: 'row', gap: 12 },
   half: { flex: 1 },
   error: { color: colors.danger, marginBottom: 10, fontSize: 13 },
+  computedNote: { fontSize: 12, color: colors.subtext, marginTop: -6, marginBottom: 10 },
 });

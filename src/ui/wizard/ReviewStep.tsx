@@ -9,6 +9,7 @@ import { PRIORITIES, Priority, TASK_TYPES, TaskType } from '../../domain/types';
 import { isWithin } from '../../logic/dates';
 import { generatePlan } from '../../logic/planGeneration';
 import { commitPlan, CommitResult } from '../../services/commitPlan';
+import { useDataStore } from '../../store/dataStore';
 import { usePlanningSession } from '../../store/planningSession';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TextField, TimeField } from '../fields';
@@ -51,6 +52,13 @@ export function ReviewStep() {
   const [bulkDirty, setBulkDirty] = useState(false);
   // Last row tapped in select mode — the anchor for range selection.
   const [anchorId, setAnchorId] = useState<string | null>(null);
+  // Display filters: hide routines / categories / tags from the LIST.
+  // Hidden tasks are still part of the plan and are still committed.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [hideRoutines, setHideRoutines] = useState(false);
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
+  const categories = useDataStore((st) => st.categories);
 
   const tasks = useMemo(
     () =>
@@ -63,6 +71,23 @@ export function ReviewStep() {
 
   const totalHours = Math.round(tasks.reduce((sum, t) => sum + t.hours, 0) * 100) / 100;
   const overCount = tasks.filter((t) => t.overCapacity).length;
+
+  const isHidden = (t: GeneratedTask) =>
+    (hideRoutines && t.taskType === 'Daily routine') ||
+    (t.categoryId != null && hiddenCategories.has(t.categoryId)) ||
+    t.tagNames.some((n) => hiddenTags.has(n));
+  const visibleTasks = useMemo(
+    () => tasks.filter((t) => !isHidden(t)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, hideRoutines, hiddenCategories, hiddenTags]
+  );
+  const hiddenCount = tasks.length - visibleTasks.length;
+  // Filter options come from the plan itself.
+  const planCategoryIds = useMemo(
+    () => [...new Set(tasks.map((t) => t.categoryId).filter((c): c is string => c != null))],
+    [tasks]
+  );
+  const planTagNames = useMemo(() => [...new Set(tasks.flatMap((t) => t.tagNames))], [tasks]);
 
   if (result) {
     return (
@@ -140,7 +165,7 @@ export function ReviewStep() {
       toggleOne(id);
       return;
     }
-    const ids = tasks.map((t) => t.localId);
+    const ids = visibleTasks.map((t) => t.localId);
     const a = ids.indexOf(anchorId);
     const b = ids.indexOf(id);
     if (a === -1 || b === -1) {
@@ -163,7 +188,7 @@ export function ReviewStep() {
     <View>
       <StepHeading
         title="Phase E — Review & commit"
-        sub={`${tasks.length} tasks · ${totalHours} planned hours. Tap a task to edit it before committing.`}
+        sub={`${tasks.length} tasks · ${totalHours} planned hours${hiddenCount > 0 ? ` · showing ${visibleTasks.length} of ${tasks.length}` : ''}. Tap a task to edit it before committing.`}
       />
       {overCount > 0 && (
         <View style={styles.warning}>
@@ -199,18 +224,90 @@ export function ReviewStep() {
               style={styles.toolbarButton}
               onPress={() =>
                 setSelected(
-                  selected.size === tasks.length
+                  selected.size === visibleTasks.length
                     ? new Set()
-                    : new Set(tasks.map((t) => t.localId))
+                    : new Set(visibleTasks.map((t) => t.localId))
                 )
               }
             >
               <Text style={styles.toolbarText}>
-                {selected.size === tasks.length ? 'Clear all' : 'Select all'}
+                {selected.size === visibleTasks.length ? 'Clear all' : 'Select all'}
               </Text>
             </Pressable>
           )}
+          <Pressable
+            style={[styles.toolbarButton, (filtersOpen || hiddenCount > 0) && styles.toolbarButtonActive]}
+            onPress={() => setFiltersOpen(!filtersOpen)}
+          >
+            <Ionicons
+              name="funnel-outline"
+              size={16}
+              color={filtersOpen || hiddenCount > 0 ? '#fff' : colors.accent}
+            />
+            <Text style={[styles.toolbarText, (filtersOpen || hiddenCount > 0) && styles.toolbarTextActive]}>
+              {hiddenCount > 0 ? `Filters (${hiddenCount} hidden)` : 'Filters'}
+            </Text>
+          </Pressable>
           {selectMode && <Text style={styles.selectedCount}>{selected.size} selected</Text>}
+        </View>
+      )}
+
+      {filtersOpen && (
+        <View style={styles.filterPanel}>
+          <Text style={styles.filterTitle}>
+            Hide from the list (hidden tasks are still committed)
+          </Text>
+          <View style={styles.filterChips}>
+            <FilterChip
+              label="Daily routines"
+              active={hideRoutines}
+              onPress={() => setHideRoutines(!hideRoutines)}
+            />
+          </View>
+          {planCategoryIds.length > 0 && (
+            <>
+              <Text style={styles.filterGroup}>Categories</Text>
+              <View style={styles.filterChips}>
+                {planCategoryIds.map((id) => (
+                  <FilterChip
+                    key={id}
+                    label={categories[id]?.name ?? 'Unknown'}
+                    active={hiddenCategories.has(id)}
+                    onPress={() =>
+                      setHiddenCategories((s) => {
+                        const next = new Set(s);
+                        if (next.has(id)) next.delete(id);
+                        else next.add(id);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
+          {planTagNames.length > 0 && (
+            <>
+              <Text style={styles.filterGroup}>Tags</Text>
+              <View style={styles.filterChips}>
+                {planTagNames.map((name) => (
+                  <FilterChip
+                    key={name}
+                    label={name}
+                    active={hiddenTags.has(name)}
+                    onPress={() =>
+                      setHiddenTags((s) => {
+                        const next = new Set(s);
+                        if (next.has(name)) next.delete(name);
+                        else next.add(name);
+                        return next;
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -260,7 +357,7 @@ export function ReviewStep() {
         />
       )}
 
-      {tasks.map((t) => {
+      {visibleTasks.map((t) => {
         const isOpen = !selectMode && expanded === t.localId;
         const isSelected = selected.has(t.localId);
         return (
@@ -370,6 +467,25 @@ export function ReviewStep() {
         commitControls
       )}
     </View>
+  );
+}
+
+/** Toggle chip: active = hidden from the list, shown struck through. */
+function FilterChip(props: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={props.onPress}
+      style={[styles.filterChip, props.active && styles.filterChipActive]}
+    >
+      <Ionicons
+        name={props.active ? 'eye-off' : 'eye'}
+        size={14}
+        color={props.active ? '#fff' : colors.subtext}
+      />
+      <Text style={[styles.filterChipText, props.active && styles.filterChipTextActive]}>
+        {props.label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -585,6 +701,24 @@ const styles = StyleSheet.create({
   },
   bulkTitle: { fontSize: 13, fontWeight: '700', color: colors.accent, marginBottom: 12 },
   commitBlock: { marginBottom: 12 },
+  filterPanel: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 12 },
+  filterTitle: { fontSize: 12, color: colors.subtext, marginBottom: 8 },
+  filterGroup: { fontSize: 12, fontWeight: '700', color: colors.text, marginTop: 10, marginBottom: 6 },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: colors.card,
+  },
+  filterChipActive: { backgroundColor: colors.subtext, borderColor: colors.subtext },
+  filterChipText: { fontSize: 12, color: colors.text },
+  filterChipTextActive: { color: '#fff', textDecorationLine: 'line-through' },
   bulkError: { fontSize: 13, color: colors.danger, marginBottom: 8 },
   rowHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   rowDate: { fontSize: 12, fontWeight: '700', color: colors.accent },
