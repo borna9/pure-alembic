@@ -11,6 +11,8 @@ import {
   refreshAsync,
 } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
+import { getSupabase, isBackendConfigured } from '../supabase/client';
 import { loadConnection, OAuthTokens, saveConnection, type ConnectionKey } from './connections';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -49,7 +51,45 @@ export const MICROSOFT_OAUTH: OAuthProviderConfig = {
   extraParams: { prompt: 'select_account' },
 };
 
-const redirectUri = makeRedirectUri({ scheme: 'purealembic', path: 'oauth' });
+/**
+ * Web: a real app route (app/oauth-callback.tsx) that completes the auth
+ * session — including under a sub-path deployment like GitHub Pages
+ * (EXPO_PUBLIC_BASE_URL, set by CI). This exact URL must be registered
+ * as an authorized redirect URI on the OAuth client (docs/SETUP.md).
+ * Native: the custom-scheme redirect.
+ */
+function getRedirectUri(): string {
+  if (Platform.OS === 'web') {
+    const base = process.env.EXPO_PUBLIC_BASE_URL ?? '';
+    return `${window.location.origin}${base}/oauth-callback`;
+  }
+  return makeRedirectUri({ scheme: 'purealembic', path: 'oauth' });
+}
+
+/**
+ * Google requires the client secret at the token endpoint for Web
+ * clients even with PKCE — the exchange runs in the google-token edge
+ * function so the secret never reaches the browser (NFR-5).
+ */
+function usesTokenBroker(config: OAuthProviderConfig): boolean {
+  return config.connection === 'google' && Platform.OS === 'web';
+}
+
+async function brokerTokenRequest(body: Record<string, string>): Promise<{
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  error?: string;
+  error_description?: string;
+}> {
+  if (!isBackendConfigured()) {
+    throw new Error('Google Calendar on the web needs the Supabase backend (google-token function).');
+  }
+  const { data, error } = await getSupabase().functions.invoke('google-token', { body });
+  if (error) throw new Error(`Token exchange failed: ${error.message}`);
+  if (data.error) throw new Error(`Token exchange failed: ${data.error_description ?? data.error}`);
+  return data;
+}
 
 /** Interactive connect: full PKCE round trip, tokens saved per NFR-5. */
 export async function connectOAuth(config: OAuthProviderConfig): Promise<void> {
@@ -59,6 +99,7 @@ export async function connectOAuth(config: OAuthProviderConfig): Promise<void> {
     );
   }
 
+  const redirectUri = getRedirectUri();
   const request = new AuthRequest({
     clientId: config.clientId,
     scopes: config.scopes,
@@ -70,6 +111,21 @@ export async function connectOAuth(config: OAuthProviderConfig): Promise<void> {
   const result = await request.promptAsync({ authorizationEndpoint: config.authorizationEndpoint });
   if (result.type !== 'success' || !result.params.code) {
     throw new Error('Authorization was cancelled.');
+  }
+
+  if (usesTokenBroker(config)) {
+    const tokens = await brokerTokenRequest({
+      grant_type: 'authorization_code',
+      code: result.params.code,
+      code_verifier: request.codeVerifier ?? '',
+      redirect_uri: redirectUri,
+    });
+    await saveConnection(config.connection, {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+    });
+    return;
   }
 
   const tokens = await exchangeCodeAsync(
@@ -101,6 +157,18 @@ export async function getAccessToken(config: OAuthProviderConfig): Promise<strin
     throw new Error('Session expired — reconnect the service in Settings.');
   }
   try {
+    if (usesTokenBroker(config)) {
+      const refreshed = await brokerTokenRequest({
+        grant_type: 'refresh_token',
+        refresh_token: stored.refreshToken,
+      });
+      await saveConnection(config.connection, {
+        accessToken: refreshed.access_token,
+        refreshToken: refreshed.refresh_token ?? stored.refreshToken,
+        expiresAt: Date.now() + (refreshed.expires_in ?? 3600) * 1000,
+      });
+      return refreshed.access_token;
+    }
     const refreshed = await refreshAsync(
       { clientId: config.clientId!, refreshToken: stored.refreshToken },
       { tokenEndpoint: config.tokenEndpoint }
@@ -111,7 +179,8 @@ export async function getAccessToken(config: OAuthProviderConfig): Promise<strin
       expiresAt: Date.now() + (refreshed.expiresIn ?? 3600) * 1000,
     });
     return refreshed.accessToken;
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith('Token exchange failed')) throw e;
     throw new Error('Token was revoked or expired — reconnect the service in Settings (IF-5).');
   }
 }

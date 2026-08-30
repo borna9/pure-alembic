@@ -37,6 +37,8 @@ jobs:
         env:
           # Serve from /<repo-name>/ on github.io; remove for a custom domain.
           EXPO_BASE_URL: /${{ github.event.repository.name }}
+          # Same value, inlined into the bundle for building OAuth redirect URIs.
+          EXPO_PUBLIC_BASE_URL: /${{ github.event.repository.name }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}

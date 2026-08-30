@@ -24,9 +24,18 @@ Everything here is **free**. The app runs fully offline with zero setup; each se
 2. **APIs & Services → Library** → enable **Google Calendar API**.
 3. **APIs & Services → OAuth consent screen** (now called the **Google Auth Platform**) → click **Get started** and complete the wizard: App information → **Audience: External** → Contact information → Create. Then, in the **Audience** section of the sidebar, add your own Google account under **Test users**; that is enough for personal use while the app is in "Testing". (Publishing to all users later requires Google's verification review — still free, just paperwork.)
 4. **Clients → Create client** (or the classic **Credentials → Create credentials → OAuth client ID**):
-   - Type **Web application** for the web build. Authorized redirect URIs: your deployed web origin (e.g. `https://<you>.github.io`) and `http://localhost:8081` for development.
+   - Type **Web application** for the web build. **Authorized redirect URIs** (exact match required):
+     - `https://<you>.github.io/pure-alembic/oauth-callback` (deployed web app)
+     - `http://localhost:8081/oauth-callback` and `http://localhost:8090/oauth-callback` (development)
+     - `https://<ref>.supabase.co/auth/v1/callback` (Supabase sign-in, §1.5)
    - For Android/iOS builds create additional Android/iOS client IDs with the package name `com.firststirrings.purealembic` (and the custom scheme redirect `purealembic:/oauth`).
 5. Put the client ID in `EXPO_PUBLIC_GOOGLE_CLIENT_ID`.
+6. **Web builds only:** Google requires the client secret at the token endpoint for Web clients, so the exchange runs in the `google-token` edge function. Configure and deploy it once:
+   ```bash
+   npx supabase secrets set GOOGLE_OAUTH_CLIENT_ID=<client-id> GOOGLE_OAUTH_CLIENT_SECRET=<client-secret>
+   npx supabase functions deploy google-token
+   ```
+   The secret lives only in Supabase's function environment, never in the app bundle.
 
 ## 3. Microsoft — Outlook Calendar & To Do (OAuth, free)
 
