@@ -6,6 +6,7 @@
 import type { StoredTask } from '../store/dataStore';
 import { useDataStore } from '../store/dataStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { deliveryTarget } from '../logic/delivery';
 import { firstAvailableTime } from '../logic/firstAvailable';
 import { getCalendarProvider, getReminderProvider } from './registry';
 
@@ -58,8 +59,9 @@ export async function pushTasksToServices(
   let processed = 0;
   for (const task of tasks) {
     try {
-      // FR-25: date + hours > 0 → calendar event; FR-27: everything else → reminder.
-      if (task.dueDate && task.hours > 0 && calendar) {
+      // Routing per src/logic/delivery.ts: daily routines and
+      // undated/zero-hour tasks → reminders; the rest → calendar.
+      if (deliveryTarget(task) === 'calendar' && calendar) {
         // FR-26: no start time → first available time from the app's own
         // records for that day (external calendars ignored); 09:00 fallback.
         const start = task.startTime ?? firstAvailableTime(data.busyItemsOn(task.dueDate), task.hours);
@@ -75,7 +77,7 @@ export async function pushTasksToServices(
           if (!task.startTime) data.updateTask(task.id, { startTime: start });
           summary.calendarEvents++;
         }
-      } else if (reminder && (!task.dueDate || task.hours <= 0)) {
+      } else if (deliveryTarget(task) === 'reminder' && reminder) {
         const url = await reminder.createReminder({ title: task.description, notes: taskNotes(task) });
         if (url) {
           data.updateTask(task.id, { externalLink: url }); // FR-28

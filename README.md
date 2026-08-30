@@ -17,7 +17,7 @@ Pure Alembic implements a guided planning session (Screen 1 of the [SRS](docs/))
 | **B — Known dates** | Tasks with fixed dates, due dates, or weekly/monthly recurrence |
 | **C — Need to schedule** | Tasks with an earliest/latest date — the app spreads them evenly, highest priority first, without overloading any day |
 | **D — Time blocking** | Time to block off, scheduled with the same algorithm |
-| **E — Review & commit** | Review everything, then commit: dated tasks with hours become **calendar events**; everything else becomes **reminders** |
+| **E — Review & commit** | Review everything, then commit: dated tasks with hours become **calendar events**; daily routines and undated/zero-hour tasks become **reminders** (routines never flood the calendar) |
 
 Supported services: Google Calendar, Outlook/Office 365 Calendar, iCloud Calendar, Apple Reminders, Microsoft To Do. The app is fully usable offline and without any connected service.
 

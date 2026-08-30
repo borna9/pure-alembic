@@ -57,9 +57,10 @@ export default function ServicesSettings() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.intro}>
-        On commit, tasks with a date and hours become events in your calendar service; all other
-        tasks become items in your reminder service. Connecting a service requires the app to be
-        configured with API credentials — see docs/SETUP.md in the repository.
+        On commit, tasks with a date and hours become events in your calendar service. Daily
+        routines, undated tasks, and zero-hour tasks go to your reminder service instead — routines
+        never touch the calendar. Connecting a service requires the app to be configured with API
+        credentials — see docs/SETUP.md in the repository.
       </Text>
 
       <Text style={styles.section}>Calendar service</Text>
@@ -107,8 +108,8 @@ export default function ServicesSettings() {
       <Text style={styles.intro}>
         Committed tasks that have not been delivered yet (for example, committed before a service
         was connected) are listed below. Untick anything that should stay out of your calendar,
-        delete stale test tasks, and send the rest. Tasks with a date and hours become calendar
-        events; everything else becomes reminders.
+        delete stale test tasks, and send the rest. Dated tasks with hours become calendar events;
+        daily routines and undated/zero-hour tasks become reminders.
       </Text>
       <DeliveryManager />
     </ScrollView>
