@@ -92,6 +92,36 @@ export function ReviewStep() {
 
   const edit = (id: string, patch: Partial<GeneratedTask>) => session.editReview([id], patch);
 
+  // Rendered both above the task list and below it, for long plans.
+  const commitControls = (
+    <View style={styles.commitBlock}>
+      {bulkOpen && bulkDirty && (
+        <View style={styles.warning}>
+          <Text style={styles.warningText}>
+            The bulk editor has unapplied changes — press “Apply” there (or close it) before
+            committing, so they aren’t lost.
+          </Text>
+        </View>
+      )}
+      <Button
+        title={busy ? 'Committing…' : `Commit ${tasks.length} tasks`}
+        disabled={busy || (bulkOpen && bulkDirty) || tasks.some((t) => !isValidDate(t.dueDate))}
+        onPress={async () => {
+          setBusy(true);
+          setCommitError(null);
+          try {
+            setResult(await commitPlan(tasks));
+          } catch (e) {
+            setCommitError(e instanceof Error ? e.message : String(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      {commitError ? <Text style={styles.bulkError}>Commit failed: {commitError}</Text> : null}
+    </View>
+  );
+
   const toggleOne = (id: string) => {
     setSelected((s) => {
       const next = new Set(s);
@@ -143,6 +173,8 @@ export function ReviewStep() {
           </Text>
         </View>
       )}
+
+      {tasks.length > 0 && commitControls}
 
       {tasks.length > 0 && (
         <View style={styles.toolbar}>
@@ -335,34 +367,7 @@ export function ReviewStep() {
       {tasks.length === 0 ? (
         <Text style={styles.hint}>Nothing to commit — go back and add tasks in the earlier phases.</Text>
       ) : (
-        <>
-          {bulkOpen && bulkDirty && (
-            <View style={styles.warning}>
-              <Text style={styles.warningText}>
-                The bulk editor has unapplied changes — press “Apply” there (or close it) before
-                committing, so they aren’t lost.
-              </Text>
-            </View>
-          )}
-          <Button
-            title={busy ? 'Committing…' : `Commit ${tasks.length} tasks`}
-            disabled={busy || (bulkOpen && bulkDirty) || tasks.some((t) => !isValidDate(t.dueDate))}
-            onPress={async () => {
-              setBusy(true);
-              setCommitError(null);
-              try {
-                setResult(await commitPlan(tasks));
-              } catch (e) {
-                setCommitError(e instanceof Error ? e.message : String(e));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-          {commitError ? (
-            <Text style={styles.bulkError}>Commit failed: {commitError}</Text>
-          ) : null}
-        </>
+        commitControls
       )}
     </View>
   );
@@ -579,6 +584,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   bulkTitle: { fontSize: 13, fontWeight: '700', color: colors.accent, marginBottom: 12 },
+  commitBlock: { marginBottom: 12 },
   bulkError: { fontSize: 13, color: colors.danger, marginBottom: 8 },
   rowHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   rowDate: { fontSize: 12, fontWeight: '700', color: colors.accent },

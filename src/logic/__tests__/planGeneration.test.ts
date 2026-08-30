@@ -163,6 +163,45 @@ describe('generatePlan — Phases C/D (FR-16..FR-23)', () => {
     for (const load of Object.values(loads)) expect(load).toBeLessThanOrEqual(8);
   });
 
+  it('caps repeating tasks at the requested occurrence count', () => {
+    const { tasks } = generatePlan(
+      {
+        ...emptySession,
+        windowEnd: '2026-08-31',
+        blockDrafts: [
+          flexible({ repeat: 'Weekly', latest: '2026-08-31', occurrenceCount: 3 }),
+        ],
+      },
+      24
+    );
+    expect(tasks.map((t) => t.dueDate)).toEqual(['2026-07-01', '2026-07-08', '2026-07-15']);
+  });
+
+  it('yields fewer occurrences when the count exceeds what fits in the window', () => {
+    const { tasks } = generatePlan(
+      { ...emptySession, blockDrafts: [flexible({ repeat: 'Weekly', occurrenceCount: 10 })] },
+      24
+    );
+    expect(tasks).toHaveLength(1); // only 2026-07-01 fits in the 7-day window
+  });
+
+  it('caps weekly known-date tasks at the requested occurrence count (Phase B)', () => {
+    const known: KnownDateDraft = {
+      localId: 'k1',
+      description: 'Team sync',
+      taskType: 'Scheduled',
+      mode: 'weekly',
+      weekday: 1,
+      occurrenceCount: 2,
+      ...baseDraft,
+    };
+    const { tasks } = generatePlan(
+      { ...emptySession, windowEnd: '2026-07-31', knownDrafts: [known] },
+      24
+    );
+    expect(tasks.map((t) => t.dueDate)).toEqual(['2026-07-06', '2026-07-13']);
+  });
+
   it('flags tasks that cannot fit under the cap', () => {
     const { overCapacityIds } = generatePlan(
       {

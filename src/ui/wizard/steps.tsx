@@ -100,6 +100,7 @@ export function KnownStep() {
   const [weekday, setWeekday] = useState<string>('Monday');
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [startTime, setStartTime] = useState('');
+  const [knownOccurrences, setKnownOccurrences] = useState(0); // 0 = whole window
 
   const inWindow = (d: string) => isValidDate(d) && isWithin(d, s.windowStart, s.windowEnd);
 
@@ -145,12 +146,17 @@ export function KnownStep() {
             weekday: mode === 'weekly' ? WEEKDAYS.indexOf(weekday) : undefined,
             dayOfMonth: mode === 'monthly' ? dayOfMonth : undefined,
             startTime: startTime || undefined,
+            occurrenceCount:
+              (mode === 'weekly' || mode === 'monthly') && knownOccurrences >= 1
+                ? Math.round(knownOccurrences)
+                : undefined,
           };
           s.addKnown(draft);
           setStartDate('');
           setEndDate('');
           setDueDate('');
           setStartTime('');
+          setKnownOccurrences(0);
         }}
       >
         <Field label="Dates">
@@ -189,6 +195,11 @@ export function KnownStep() {
             <NumberField value={dayOfMonth} onChange={(v) => setDayOfMonth(Math.round(v))} />
           </Field>
         )}
+        {(mode === 'weekly' || mode === 'monthly') && (
+          <Field label="Number of occurrences (optional — empty covers the whole window)">
+            <NumberField value={knownOccurrences} onChange={setKnownOccurrences} placeholder="all" />
+          </Field>
+        )}
         <Field label="Start time (optional)">
           <TimeField value={startTime} onChange={setStartTime} />
         </Field>
@@ -207,13 +218,16 @@ function describeKnown(d: KnownDateDraft): string {
     case 'dueOnly':
       return `due ${d.dueDate}`;
     case 'weekly':
-      return `every ${WEEKDAYS[d.weekday ?? 0]}`;
+      return `every ${WEEKDAYS[d.weekday ?? 0]}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
     case 'monthly':
-      return `monthly on day ${d.dayOfMonth}`;
+      return `monthly on day ${d.dayOfMonth}${d.occurrenceCount ? ` × ${d.occurrenceCount}` : ''}`;
   }
 }
 
 // ---- Phases C & D: flexible tasks (FR-16..FR-23) ----------------------------
+
+const BOUND_MODES = ['Until a date', 'Number of times'] as const;
+type BoundMode = (typeof BOUND_MODES)[number];
 
 export function FlexibleStep(props: { phase: 'schedule' | 'block' }) {
   const s = usePlanningSession();
@@ -224,11 +238,21 @@ export function FlexibleStep(props: { phase: 'schedule' | 'block' }) {
   const [latest, setLatest] = useState('');
   const [repeat, setRepeat] = useState<RepeatInterval>('No repeat');
   const [startTime, setStartTime] = useState('');
+  const [boundMode, setBoundMode] = useState<BoundMode>('Until a date');
+  const [occurrences, setOccurrences] = useState(0);
+
+  // Count mode only applies to repeating tasks.
+  const countMode = repeat !== 'No repeat' && boundMode === 'Number of times';
 
   const inWindow = (d: string) => isValidDate(d) && isWithin(d, s.windowStart, s.windowEnd);
   const validate = (): string | null => {
-    if (!inWindow(earliest) || !inWindow(latest)) return 'Earliest and latest dates must be valid and inside the planning window (FR-4).';
-    if (compareDates(earliest, latest) > 0) return 'Earliest date must not be after the latest date.';
+    if (!inWindow(earliest)) return 'Earliest date must be valid and inside the planning window (FR-4).';
+    if (countMode) {
+      if (occurrences < 1) return 'Enter how many times the task should occur (at least 1).';
+    } else {
+      if (!inWindow(latest)) return 'Latest date must be valid and inside the planning window (FR-4).';
+      if (compareDates(earliest, latest) > 0) return 'Earliest date must not be after the latest date.';
+    }
     if (startTime && !isValidTime(startTime)) return 'Start time must be HH:MM.';
     return null;
   };
@@ -245,7 +269,12 @@ export function FlexibleStep(props: { phase: 'schedule' | 'block' }) {
       />
       <CategoryPicker categoryId={s[categoryKey]} onChange={(id) => s.setCategory(categoryKey, id)} />
       <DraftList
-        drafts={s[listKey].map((d) => ({ ...d, detail: `${d.earliest} → ${d.latest}${d.repeat !== 'No repeat' ? ` · ${d.repeat}` : ''}` }))}
+        drafts={s[listKey].map((d) => ({
+          ...d,
+          detail: d.occurrenceCount
+            ? `from ${d.earliest} · ${d.repeat} × ${d.occurrenceCount}`
+            : `${d.earliest} → ${d.latest}${d.repeat !== 'No repeat' ? ` · ${d.repeat}` : ''}`,
+        }))}
         onRemove={(id) => s.removeDraft(listKey, id)}
         emptyText={isC ? 'No tasks to schedule yet.' : 'No time blocks yet.'}
       />
@@ -253,30 +282,52 @@ export function FlexibleStep(props: { phase: 'schedule' | 'block' }) {
         categoryId={s[categoryKey]}
         validate={validate}
         onAdd={(base) => {
-          const draft: FlexibleDraft = { ...base, earliest, latest, repeat, startTime: startTime || undefined };
+          const draft: FlexibleDraft = {
+            ...base,
+            earliest,
+            // Count mode: occurrences run from the earliest date and are
+            // bounded by the window end instead of an explicit latest date.
+            latest: countMode ? s.windowEnd : latest,
+            repeat,
+            startTime: startTime || undefined,
+            occurrenceCount: countMode ? Math.round(occurrences) : undefined,
+          };
           if (isC) s.addSchedule(draft);
           else s.addBlock(draft);
           setEarliest('');
           setLatest('');
           setRepeat('No repeat');
           setStartTime('');
+          setBoundMode('Until a date');
+          setOccurrences(0);
         }}
       >
+        <Field label="Repeat">
+          <Segmented<RepeatInterval> options={REPEAT_INTERVALS} value={repeat} onChange={setRepeat} />
+        </Field>
+        {repeat !== 'No repeat' && (
+          <Field label="Repeat until">
+            <Segmented options={BOUND_MODES} value={boundMode} onChange={setBoundMode} />
+          </Field>
+        )}
         <View style={styles.pair}>
           <View style={styles.half}>
-            <Field label="Earliest date">
+            <Field label={repeat === 'No repeat' ? 'Earliest date' : 'First occurrence'}>
               <DateField value={earliest} onChange={setEarliest} minDate={s.windowStart} maxDate={s.windowEnd} />
             </Field>
           </View>
           <View style={styles.half}>
-            <Field label="Latest date">
-              <DateField value={latest} onChange={setLatest} minDate={s.windowStart} maxDate={s.windowEnd} />
-            </Field>
+            {countMode ? (
+              <Field label="Occurrences">
+                <NumberField value={occurrences} onChange={setOccurrences} placeholder="e.g. 4" />
+              </Field>
+            ) : (
+              <Field label="Latest date">
+                <DateField value={latest} onChange={setLatest} minDate={s.windowStart} maxDate={s.windowEnd} />
+              </Field>
+            )}
           </View>
         </View>
-        <Field label="Repeat">
-          <Segmented<RepeatInterval> options={REPEAT_INTERVALS} value={repeat} onChange={setRepeat} />
-        </Field>
         <Field label="Start time (optional)">
           <TimeField value={startTime} onChange={setStartTime} />
         </Field>

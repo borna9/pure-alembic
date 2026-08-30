@@ -34,6 +34,8 @@ export interface KnownDateDraft extends DraftBase {
   weekday?: number; // weekly, 0=Sun (FR-14c)
   dayOfMonth?: number; // monthly (FR-14d)
   startTime?: TimeOfDay;
+  /** Weekly/monthly: cap the expansion at N occurrences (unset = whole window). */
+  occurrenceCount?: number;
 }
 
 /** Phases C and D (FR-16..FR-23): earliest/latest window plus repeat. */
@@ -42,6 +44,12 @@ export interface FlexibleDraft extends DraftBase {
   latest: ISODate;
   repeat: RepeatInterval;
   startTime?: TimeOfDay;
+  /**
+   * Alternative to `latest` for repeating tasks: stop after N
+   * occurrences (latest is then the window end, and the expansion is
+   * capped at N). Ignored for "No repeat".
+   */
+  occurrenceCount?: number;
 }
 
 export interface PlanningSession {

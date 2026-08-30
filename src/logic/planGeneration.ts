@@ -172,7 +172,12 @@ export function generatePlan(
     const pending: { draft: FlexibleDraft; item: SchedulableItem }[] = [];
 
     for (const draft of drafts) {
-      const occurrences = expandRepeat(draft.earliest, draft.latest, draft.repeat);
+      const expanded = expandRepeat(draft.earliest, draft.latest, draft.repeat);
+      // Occurrence-count alternative to an end date: keep the first N.
+      const occurrences =
+        draft.occurrenceCount && draft.occurrenceCount > 0
+          ? expanded.slice(0, draft.occurrenceCount)
+          : expanded;
       if (occurrences.length > 0) {
         // Recurring: dates are fixed by the repeat pattern (FR-17/FR-21).
         let firstTask: GeneratedTask | null = null;
@@ -267,19 +272,23 @@ function knownDateInstances(
       // FR-14b: start date left empty, end date equals the due date.
       if (!draft.dueDate) return [];
       return [{ dueDate: draft.dueDate }];
-    case 'weekly':
+    case 'weekly': {
       // FR-14c: one instance per qualifying weekday in the window.
       if (draft.weekday == null) return [];
-      return expandWeeklyByWeekday(session.windowStart, session.windowEnd, draft.weekday).map(
-        (d) => ({ dueDate: d })
-      );
-    case 'monthly':
+      const days = expandWeeklyByWeekday(session.windowStart, session.windowEnd, draft.weekday);
+      return capOccurrences(days, draft.occurrenceCount).map((d) => ({ dueDate: d }));
+    }
+    case 'monthly': {
       // FR-14d: one instance per qualifying day of month in the window.
       if (draft.dayOfMonth == null) return [];
-      return expandMonthlyByDay(session.windowStart, session.windowEnd, draft.dayOfMonth).map(
-        (d) => ({ dueDate: d })
-      );
+      const days = expandMonthlyByDay(session.windowStart, session.windowEnd, draft.dayOfMonth);
+      return capOccurrences(days, draft.occurrenceCount).map((d) => ({ dueDate: d }));
+    }
   }
+}
+
+function capOccurrences(days: ISODate[], count?: number): ISODate[] {
+  return count && count > 0 ? days.slice(0, count) : days;
 }
 
 function clampDate(d: ISODate, session: PlanningSession): ISODate {
