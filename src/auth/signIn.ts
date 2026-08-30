@@ -20,6 +20,15 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
 
 const redirectTo = makeRedirectUri({ scheme: 'purealembic', path: 'auth-callback' });
 
+/**
+ * Always show the provider's account chooser: the browser may hold a
+ * session for a different account than the one the user wants here.
+ * Google and Microsoft honor `prompt=select_account`; Apple always asks.
+ */
+function chooserParams(provider: SocialProvider): Record<string, string> | undefined {
+  return provider === 'google' || provider === 'azure' ? { prompt: 'select_account' } : undefined;
+}
+
 export async function signInWithProvider(provider: SocialProvider): Promise<void> {
   const supabase = getSupabase();
 
@@ -28,7 +37,7 @@ export async function signInWithProvider(provider: SocialProvider): Promise<void
       provider,
       // Return to the current page — the app may be served under a
       // subpath (GitHub Pages), so the bare origin would miss the app.
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.href, queryParams: chooserParams(provider) },
     });
     if (error) throw error;
     return;
@@ -38,7 +47,7 @@ export async function signInWithProvider(provider: SocialProvider): Promise<void
   // PKCE exchange from the redirect URL.
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo, skipBrowserRedirect: true },
+    options: { redirectTo, skipBrowserRedirect: true, queryParams: chooserParams(provider) },
   });
   if (error) throw error;
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
@@ -60,14 +69,14 @@ export async function linkProvider(provider: SocialProvider): Promise<void> {
       provider,
       // Return to the current page — the app may be served under a
       // subpath (GitHub Pages), so the bare origin would miss the app.
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.href, queryParams: chooserParams(provider) },
     });
     if (error) throw error;
     return;
   }
   const { data, error } = await supabase.auth.linkIdentity({
     provider,
-    options: { redirectTo, skipBrowserRedirect: true },
+    options: { redirectTo, skipBrowserRedirect: true, queryParams: chooserParams(provider) },
   });
   if (error) throw error;
   if (data?.url) await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

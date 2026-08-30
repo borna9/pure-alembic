@@ -33,7 +33,10 @@ export const GOOGLE_OAUTH: OAuthProviderConfig = {
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
   scopes: ['https://www.googleapis.com/auth/calendar.events'],
-  extraParams: { access_type: 'offline', prompt: 'consent' },
+  // select_account: always show the account chooser (the browser may be
+  // signed into a different Google account than the one used here);
+  // consent: required with access_type=offline to obtain a refresh token.
+  extraParams: { access_type: 'offline', prompt: 'select_account consent' },
 };
 
 export const MICROSOFT_OAUTH: OAuthProviderConfig = {
@@ -43,6 +46,7 @@ export const MICROSOFT_OAUTH: OAuthProviderConfig = {
   authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
   tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
   scopes: ['Calendars.ReadWrite', 'Tasks.ReadWrite', 'offline_access'],
+  extraParams: { prompt: 'select_account' },
 };
 
 const redirectUri = makeRedirectUri({ scheme: 'purealembic', path: 'oauth' });
