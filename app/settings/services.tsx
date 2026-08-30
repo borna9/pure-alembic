@@ -9,6 +9,7 @@ import {
   useSettingsStore,
 } from '../../src/store/settingsStore';
 import { clearConnection, ConnectionKey, isConnected } from '../../src/providers/connections';
+import { DeliveryManager } from '../../src/ui/DeliveryManager';
 import { connectCaldav, connectService } from '../../src/providers/connect';
 import { Button, Field, TextField } from '../../src/ui/fields';
 import { colors } from '../../src/ui/theme';
@@ -40,8 +41,6 @@ const REMINDERS: ServiceRow<ReminderServiceKind>[] = [
 export default function ServicesSettings() {
   const settings = useSettingsStore();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const state: Record<string, boolean> = {};
@@ -107,32 +106,11 @@ export default function ServicesSettings() {
       <Text style={styles.section}>Delivery</Text>
       <Text style={styles.intro}>
         Committed tasks that have not been delivered yet (for example, committed before a service
-        was connected) can be sent now. Tasks with a date and hours become calendar events;
-        everything else becomes reminders.
+        was connected) are listed below. Untick anything that should stay out of your calendar,
+        delete stale test tasks, and send the rest. Tasks with a date and hours become calendar
+        events; everything else becomes reminders.
       </Text>
-      <Button
-        title={pushBusy ? 'Sending…' : 'Send committed tasks to services'}
-        disabled={pushBusy}
-        onPress={async () => {
-          setPushBusy(true);
-          setPushMessage(null);
-          try {
-            const { pushUnlinkedTasks } = await import('../../src/providers/push');
-            const r = await pushUnlinkedTasks((done, total) =>
-              setPushMessage(`Sending ${done} of ${total}…`)
-            );
-            setPushMessage(
-              `${r.calendarEvents} calendar event${r.calendarEvents === 1 ? '' : 's'} and ${r.reminders} reminder${r.reminders === 1 ? '' : 's'} created.` +
-                (r.errors.length > 0 ? ` ${r.errors.length} failed: ${r.errors[0]}` : '')
-            );
-          } catch (e) {
-            setPushMessage(e instanceof Error ? e.message : String(e));
-          } finally {
-            setPushBusy(false);
-          }
-        }}
-      />
-      {pushMessage ? <Text style={styles.pushMessage}>{pushMessage}</Text> : null}
+      <DeliveryManager />
     </ScrollView>
   );
 }
