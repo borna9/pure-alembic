@@ -30,6 +30,18 @@ export function taskNotes(task: StoredTask): string {
   return lines.join('\n');
 }
 
+/**
+ * Push every committed task that has no external link yet (FR-28) to the
+ * configured services — the recovery path for tasks committed before a
+ * service was connected/active.
+ */
+export async function pushUnlinkedTasks(): Promise<PushSummary> {
+  const tasks = Object.values(useDataStore.getState().tasks).filter(
+    (t) => !t._deleted && !t.externalLink
+  );
+  return pushTasksToServices(tasks);
+}
+
 export async function pushTasksToServices(tasks: StoredTask[]): Promise<PushSummary> {
   const settings = useSettingsStore.getState();
   const data = useDataStore.getState();

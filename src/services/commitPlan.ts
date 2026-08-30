@@ -12,6 +12,8 @@ export interface CommitResult {
   /** Filled in by the provider layer (FR-25/FR-27); 0 when not configured. */
   calendarEvents: number;
   reminders: number;
+  /** Per-task delivery failures — surfaced to the user, never swallowed. */
+  pushErrors: string[];
 }
 
 export async function commitPlan(generated: GeneratedTask[]): Promise<CommitResult> {
@@ -68,5 +70,6 @@ export async function commitPlan(generated: GeneratedTask[]): Promise<CommitResu
     created: createdParents.length + createdChildren.length,
     calendarEvents: pushed.calendarEvents,
     reminders: pushed.reminders,
+    pushErrors: pushed.errors,
   };
 }

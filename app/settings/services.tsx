@@ -40,6 +40,8 @@ const REMINDERS: ServiceRow<ReminderServiceKind>[] = [
 export default function ServicesSettings() {
   const settings = useSettingsStore();
   const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const state: Record<string, boolean> = {};
@@ -69,7 +71,11 @@ export default function ServicesSettings() {
           active={settings.calendarService === c.kind}
           connected={c.connection ? !!connected[c.connection] : true}
           onSelect={() => settings.setCalendarService(c.kind)}
-          onConnected={refresh}
+          onConnected={() => {
+            // Connecting implies wanting to use it — activate automatically.
+            settings.setCalendarService(c.kind);
+            refresh();
+          }}
           onDisconnect={async () => {
             if (c.connection) await clearConnection(c.connection);
             if (settings.calendarService === c.kind) settings.setCalendarService(null);
@@ -86,7 +92,10 @@ export default function ServicesSettings() {
           active={settings.reminderService === r.kind}
           connected={r.connection ? !!connected[r.connection] : true}
           onSelect={() => settings.setReminderService(r.kind)}
-          onConnected={refresh}
+          onConnected={() => {
+            settings.setReminderService(r.kind);
+            refresh();
+          }}
           onDisconnect={async () => {
             if (r.connection) await clearConnection(r.connection);
             if (settings.reminderService === r.kind) settings.setReminderService(null);
@@ -94,6 +103,34 @@ export default function ServicesSettings() {
           }}
         />
       ))}
+
+      <Text style={styles.section}>Delivery</Text>
+      <Text style={styles.intro}>
+        Committed tasks that have not been delivered yet (for example, committed before a service
+        was connected) can be sent now. Tasks with a date and hours become calendar events;
+        everything else becomes reminders.
+      </Text>
+      <Button
+        title={pushBusy ? 'Sending…' : 'Send committed tasks to services'}
+        disabled={pushBusy}
+        onPress={async () => {
+          setPushBusy(true);
+          setPushMessage(null);
+          try {
+            const { pushUnlinkedTasks } = await import('../../src/providers/push');
+            const r = await pushUnlinkedTasks();
+            setPushMessage(
+              `${r.calendarEvents} calendar event${r.calendarEvents === 1 ? '' : 's'} and ${r.reminders} reminder${r.reminders === 1 ? '' : 's'} created.` +
+                (r.errors.length > 0 ? ` ${r.errors.length} failed: ${r.errors[0]}` : '')
+            );
+          } catch (e) {
+            setPushMessage(e instanceof Error ? e.message : String(e));
+          } finally {
+            setPushBusy(false);
+          }
+        }}
+      />
+      {pushMessage ? <Text style={styles.pushMessage}>{pushMessage}</Text> : null}
     </ScrollView>
   );
 }
@@ -194,4 +231,5 @@ const styles = StyleSheet.create({
   actionButton: { flex: 1 },
   caldavForm: { marginTop: 10 },
   errorText: { fontSize: 12, color: colors.danger, marginTop: 8 },
+  pushMessage: { fontSize: 13, color: colors.accent, marginTop: 10, lineHeight: 18 },
 });

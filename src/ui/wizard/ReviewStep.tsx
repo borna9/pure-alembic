@@ -97,10 +97,18 @@ export function ReviewStep() {
           <Text style={styles.summaryLine}>{result.created} tasks created</Text>
           <Text style={styles.summaryLine}>{result.calendarEvents} calendar events</Text>
           <Text style={styles.summaryLine}>{result.reminders} reminders</Text>
-          {result.calendarEvents === 0 && result.reminders === 0 ? (
+          {result.calendarEvents === 0 && result.reminders === 0 && result.pushErrors.length === 0 ? (
             <Text style={styles.hint}>
-              No calendar or reminder service is connected yet — tasks are stored in the app. Connect
-              services under Settings → Calendar & Reminders.
+              No calendar or reminder service is active yet — tasks are stored in the app. Connect a
+              service under Settings → Calendar & Reminders, then use “Send committed tasks to
+              services” there to deliver them.
+            </Text>
+          ) : null}
+          {result.pushErrors.length > 0 ? (
+            <Text style={styles.bulkError}>
+              {result.pushErrors.length} task{result.pushErrors.length > 1 ? 's' : ''} could not be
+              delivered: {result.pushErrors[0]}
+              {result.pushErrors.length > 1 ? ` (+${result.pushErrors.length - 1} more)` : ''}
             </Text>
           ) : null}
         </View>
