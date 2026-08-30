@@ -3,12 +3,13 @@
 
 import type { ReminderProvider } from '../types';
 import { getAccessToken, MICROSOFT_OAUTH } from '../oauth';
+import { fetchWithTimeout } from '../http';
 
 let defaultListId: string | null = null;
 
 async function getDefaultListId(token: string): Promise<string> {
   if (defaultListId) return defaultListId;
-  const res = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', {
+  const res = await fetchWithTimeout('https://graph.microsoft.com/v1.0/me/todo/lists', {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Microsoft To Do: ${res.status} ${await res.text()}`);
@@ -23,7 +24,7 @@ export const microsoftTodoReminderProvider: ReminderProvider = {
   async createReminder(spec) {
     const token = await getAccessToken(MICROSOFT_OAUTH);
     const listId = await getDefaultListId(token);
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://graph.microsoft.com/v1.0/me/todo/lists/${encodeURIComponent(listId)}/tasks`,
       {
         method: 'POST',

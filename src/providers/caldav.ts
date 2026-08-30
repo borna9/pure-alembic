@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { newId } from '../lib/id';
 import { getSupabase, isBackendConfigured } from '../supabase/client';
 import { CaldavCredentials, loadConnection } from './connections';
+import { fetchWithTimeout } from './http';
 import { toIcsUtc, toLocalDate, endTimeFrom } from './datetime';
 
 const CALDAV_BASE = 'https://caldav.icloud.com';
@@ -33,7 +34,7 @@ async function caldavFetch(
     return data as { status: number; text: string; headers: Record<string, string> };
   }
 
-  const res = await fetch(url, { method: init.method, headers, body: init.body });
+  const res = await fetchWithTimeout(url, { method: init.method, headers, body: init.body });
   const text = await res.text();
   const outHeaders: Record<string, string> = {};
   res.headers.forEach((v, k) => (outHeaders[k] = v));

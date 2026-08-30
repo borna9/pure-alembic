@@ -35,14 +35,19 @@ export function taskNotes(task: StoredTask): string {
  * configured services — the recovery path for tasks committed before a
  * service was connected/active.
  */
-export async function pushUnlinkedTasks(): Promise<PushSummary> {
+export async function pushUnlinkedTasks(
+  onProgress?: (done: number, total: number) => void
+): Promise<PushSummary> {
   const tasks = Object.values(useDataStore.getState().tasks).filter(
     (t) => !t._deleted && !t.externalLink
   );
-  return pushTasksToServices(tasks);
+  return pushTasksToServices(tasks, onProgress);
 }
 
-export async function pushTasksToServices(tasks: StoredTask[]): Promise<PushSummary> {
+export async function pushTasksToServices(
+  tasks: StoredTask[],
+  onProgress?: (done: number, total: number) => void
+): Promise<PushSummary> {
   const settings = useSettingsStore.getState();
   const data = useDataStore.getState();
   const summary: PushSummary = { calendarEvents: 0, reminders: 0, errors: [] };
@@ -50,6 +55,7 @@ export async function pushTasksToServices(tasks: StoredTask[]): Promise<PushSumm
   const calendar = settings.calendarService ? await getCalendarProvider(settings.calendarService) : null;
   const reminder = settings.reminderService ? await getReminderProvider(settings.reminderService) : null;
 
+  let processed = 0;
   for (const task of tasks) {
     try {
       // FR-25: date + hours > 0 → calendar event; FR-27: everything else → reminder.
@@ -79,6 +85,7 @@ export async function pushTasksToServices(tasks: StoredTask[]): Promise<PushSumm
     } catch (e) {
       summary.errors.push(`${task.description}: ${e instanceof Error ? e.message : String(e)}`);
     }
+    onProgress?.(++processed, tasks.length);
   }
   return summary;
 }

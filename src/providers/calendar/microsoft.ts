@@ -3,12 +3,13 @@
 import type { CalendarProvider } from '../types';
 import { getAccessToken, MICROSOFT_OAUTH } from '../oauth';
 import { endTimeFrom, localTimeZone } from '../datetime';
+import { fetchWithTimeout } from '../http';
 
 export const microsoftCalendarProvider: CalendarProvider = {
   async createEvent(spec) {
     const token = await getAccessToken(MICROSOFT_OAUTH);
     const timeZone = localTimeZone();
-    const res = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+    const res = await fetchWithTimeout('https://graph.microsoft.com/v1.0/me/events', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

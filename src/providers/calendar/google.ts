@@ -4,12 +4,13 @@
 import type { CalendarProvider } from '../types';
 import { getAccessToken, GOOGLE_OAUTH } from '../oauth';
 import { endTimeFrom, localTimeZone } from '../datetime';
+import { fetchWithTimeout } from '../http';
 
 export const googleCalendarProvider: CalendarProvider = {
   async createEvent(spec) {
     const token = await getAccessToken(GOOGLE_OAUTH);
     const timeZone = localTimeZone();
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events',
       {
         method: 'POST',

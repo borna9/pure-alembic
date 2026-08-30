@@ -118,7 +118,9 @@ export default function ServicesSettings() {
           setPushMessage(null);
           try {
             const { pushUnlinkedTasks } = await import('../../src/providers/push');
-            const r = await pushUnlinkedTasks();
+            const r = await pushUnlinkedTasks((done, total) =>
+              setPushMessage(`Sending ${done} of ${total}…`)
+            );
             setPushMessage(
               `${r.calendarEvents} calendar event${r.calendarEvents === 1 ? '' : 's'} and ${r.reminders} reminder${r.reminders === 1 ? '' : 's'} created.` +
                 (r.errors.length > 0 ? ` ${r.errors.length} failed: ${r.errors[0]}` : '')
