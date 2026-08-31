@@ -38,6 +38,9 @@ export default function SettingsScreen() {
           </Pressable>
         </Link>
       ))}
+      <Text style={styles.build}>
+        Build {(process.env.EXPO_PUBLIC_BUILD_ID ?? 'dev').slice(0, 7)}
+      </Text>
     </View>
   );
 }
@@ -46,6 +49,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
   conflictRow: { borderWidth: 1, borderColor: '#b56a00' },
+  build: { fontSize: 11, color: '#bbb', textAlign: 'center', marginTop: 'auto' },
   icon: { marginRight: 12 },
   texts: { flex: 1 },
   title: { fontSize: 16, fontWeight: '600' },

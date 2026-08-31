@@ -185,9 +185,18 @@ async function syncPlanningSession(
   for (const f of SESSION_FIELDS) localFields[f] = s[f];
   const local = { fields: localFields, clock: s._clock ?? {} };
 
+  // A pristine session (never touched on this device) must not be pushed —
+  // it would compete with, and could overwrite, real work from another
+  // device that predates clock stamping.
+  const pristine =
+    !s.started &&
+    !s.windowStart &&
+    s.routineDrafts.length + s.knownDrafts.length + s.scheduleDrafts.length + s.blockDrafts.length === 0 &&
+    Object.keys(s._clock ?? {}).length === 0;
+
   const { data: rows, error } = await supabase
     .from('planning_sessions')
-    .select('id, data, clock')
+    .select('id, data, clock, updated_at')
     .order('updated_at', { ascending: false })
     .limit(1);
   if (error) throw new Error(`Pull planning session: ${error.message}`);
@@ -196,10 +205,16 @@ async function syncPlanningSession(
 
   let merged = local;
   if (remoteRow) {
-    const remote = {
-      fields: remoteRow.data as Record<string, unknown>,
-      clock: (remoteRow.clock as FieldClock) ?? {},
-    };
+    // Fields written before clock-stamping existed carry no timestamp;
+    // give them the row's updated_at so they still win over an untouched
+    // local field instead of being silently discarded.
+    const rowStamp = new Date(remoteRow.updated_at as string).toISOString();
+    const remoteClock: FieldClock = { ...((remoteRow.clock as FieldClock) ?? {}) };
+    const remoteFields = remoteRow.data as Record<string, unknown>;
+    for (const f of SESSION_FIELDS) {
+      if (f in remoteFields && !remoteClock[f]) remoteClock[f] = rowStamp;
+    }
+    const remote = { fields: remoteFields, clock: remoteClock };
     const outcome = mergeRecord(local, remote, lastSyncAt);
     // LWW: on a same-field conflict the newer edit wins outright.
     for (const c of outcome.conflicts) {
@@ -217,7 +232,7 @@ async function syncPlanningSession(
   if (s.cloudId !== cloudId) usePlanningSession.setState({ cloudId });
 
   const remoteData = remoteRow ? JSON.stringify(remoteRow.data) : null;
-  if (remoteData !== JSON.stringify(merged.fields)) {
+  if ((!pristine || remoteRow) && remoteData !== JSON.stringify(merged.fields)) {
     const { error: pushError } = await supabase.from('planning_sessions').upsert({
       id: cloudId,
       user_id: userId,

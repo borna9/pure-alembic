@@ -39,6 +39,8 @@ jobs:
           EXPO_BASE_URL: /${{ github.event.repository.name }}
           # Same value, inlined into the bundle for building OAuth redirect URIs.
           EXPO_PUBLIC_BASE_URL: /${{ github.event.repository.name }}
+          # Shown in Settings so a stale cached bundle is identifiable.
+          EXPO_PUBLIC_BUILD_ID: ${{ github.sha }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.EXPO_PUBLIC_GOOGLE_CLIENT_ID }}
