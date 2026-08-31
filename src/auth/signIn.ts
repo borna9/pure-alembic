@@ -52,13 +52,19 @@ export async function signInWithProvider(provider: SocialProvider): Promise<void
   if (error) throw error;
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
   if (result.type !== 'success') return;
+  await exchangeFromCallback(result.url);
+}
 
-  const url = new URL(result.url);
-  const code = url.searchParams.get('code');
-  if (code) {
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    if (exchangeError) throw exchangeError;
+/** Complete the PKCE exchange from a native redirect URL. */
+async function exchangeFromCallback(callbackUrl: string): Promise<void> {
+  // Regex instead of the URL API — React Native's URL lacks searchParams.
+  const code = /[?&]code=([^&#]+)/.exec(callbackUrl)?.[1];
+  if (!code) {
+    const err = /[?&]error_description=([^&#]+)/.exec(callbackUrl)?.[1];
+    throw new Error(err ? decodeURIComponent(err) : 'Sign-in was not completed (no code returned).');
   }
+  const { error } = await getSupabase().auth.exchangeCodeForSession(code);
+  if (error) throw error;
 }
 
 /** ACC-3: link an additional identity provider to the signed-in account. */
@@ -79,5 +85,8 @@ export async function linkProvider(provider: SocialProvider): Promise<void> {
     options: { redirectTo, skipBrowserRedirect: true, queryParams: chooserParams(provider) },
   });
   if (error) throw error;
-  if (data?.url) await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (data?.url) {
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === 'success') await exchangeFromCallback(result.url);
+  }
 }

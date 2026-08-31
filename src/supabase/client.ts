@@ -25,6 +25,10 @@ export function getSupabase(): SupabaseClient {
       persistSession: true,
       // On web, Supabase parses the OAuth redirect from the URL itself.
       detectSessionInUrl: Platform.OS === 'web',
+      // PKCE: the redirect carries a ?code= that we exchange explicitly on
+      // native (see auth/signIn.ts); the implicit default returns tokens in
+      // a URL fragment the native flow never sees.
+      flowType: 'pkce',
     },
   });
   return client;
