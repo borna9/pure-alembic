@@ -51,6 +51,25 @@ export async function getGoogleEvent(eventId: string): Promise<GoogleEvent | nul
   return (await res.json()) as GoogleEvent;
 }
 
+/** Update an event's title, notes, and times (bidirectional sync push). */
+export async function updateGoogleEvent(
+  eventId: string,
+  spec: { title: string; date: string; startTime: string; hours: number; notes: string }
+): Promise<void> {
+  const timeZone = localTimeZone();
+  const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      summary: spec.title,
+      description: spec.notes,
+      start: { dateTime: `${spec.date}T${spec.startTime}:00`, timeZone },
+      end: { dateTime: `${spec.date}T${endTimeFrom(spec.startTime, spec.hours)}:00`, timeZone },
+    }),
+  });
+  if (!res.ok) throw new Error(`Google Calendar update: ${res.status} ${await res.text()}`);
+}
+
 export async function deleteGoogleEvent(eventId: string): Promise<void> {
   const res = await fetchWithTimeout(`${BASE}/${encodeURIComponent(eventId)}`, {
     method: 'DELETE',

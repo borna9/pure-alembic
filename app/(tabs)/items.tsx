@@ -115,8 +115,8 @@ function ItemRow(props: {
         <View style={styles.editor}>
           {task.externalLink ? (
             <Text style={styles.hint}>
-              Delivered to your calendar/reminders. For date and time changes, prefer editing the
-              calendar event and pulling — the calendar wins on conflicts.
+              Delivered. Changes you make here are pushed to your calendar on the next “Sync with
+              calendar”; if both sides changed since the last sync, the calendar version wins.
             </Text>
           ) : null}
           <Field label="Description">

@@ -34,7 +34,7 @@ export function CalendarPullButton() {
   return (
     <View style={styles.pullBlock}>
       <Button
-        title={busy ? 'Checking calendar…' : 'Pull changes from calendar'}
+        title={busy ? 'Syncing with calendar…' : 'Sync with calendar'}
         kind="secondary"
         disabled={busy}
         onPress={async () => {
@@ -46,7 +46,7 @@ export function CalendarPullButton() {
               setMessage(`Checking ${done} of ${total}…`)
             );
             setMessage(
-              `${r.updated} task${r.updated === 1 ? '' : 's'} updated from calendar, ${r.deletedInApp} deleted here, ${r.deletedInCalendar} event${r.deletedInCalendar === 1 ? '' : 's'} removed from calendar.` +
+              `${r.updated} updated here, ${r.pushedToCalendar} pushed to calendar, ${r.deletedInApp} deleted here, ${r.deletedInCalendar} removed from calendar.` +
                 (r.errors.length ? ` ${r.errors.length} failed: ${r.errors[0]}` : '')
             );
           } catch (e) {

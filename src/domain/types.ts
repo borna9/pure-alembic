@@ -53,8 +53,20 @@ export interface Task {
   externalId?: string | null;
   /** Id of the planning session this task was committed from. */
   planningSessionId?: string | null;
+  /**
+   * Snapshot of the fields as last synced with the external calendar —
+   * the baseline that tells bidirectional sync which side changed.
+   */
+  externalSnapshot?: ExternalSnapshot | null;
   /** Links preparation/follow-up tasks (FR-9/FR-10) to their originating task. */
   parentTaskId?: string | null;
+}
+
+export interface ExternalSnapshot {
+  dueDate: ISODate;
+  startTime: TimeOfDay | null;
+  hours: number;
+  description: string;
 }
 
 // Repeat intervals for Phases C and D (FR-17/FR-21).

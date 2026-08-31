@@ -76,6 +76,13 @@ export async function pushTasksToServices(
           data.updateTask(task.id, {
             externalLink: created.url ?? created.id, // FR-28
             externalId: created.id,
+            // Baseline for bidirectional sync.
+            externalSnapshot: {
+              dueDate: task.dueDate,
+              startTime: start,
+              hours: task.hours,
+              description: task.description,
+            },
           });
           if (!task.startTime) data.updateTask(task.id, { startTime: start });
           summary.calendarEvents++;

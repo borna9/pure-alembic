@@ -89,7 +89,7 @@ export function SignedInAccount({ session }: { session: Session }) {
             try {
               const { pullCalendarChanges } = await import('../services/calendarPull');
               const c = await pullCalendarChanges();
-              msg += `. Calendar: ${c.updated} updated, ${c.deletedInApp} removed here, ${c.deletedInCalendar} removed there${c.errors.length ? `, ${c.errors.length} failed` : ''}`;
+              msg += `. Calendar: ${c.updated} pulled, ${c.pushedToCalendar} pushed, ${c.deletedInApp} removed here, ${c.deletedInCalendar} removed there${c.errors.length ? `, ${c.errors.length} failed` : ''}`;
             } catch (e) {
               msg += `. Calendar pull failed: ${e instanceof Error ? e.message : String(e)}`;
             }

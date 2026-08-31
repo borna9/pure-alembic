@@ -1,31 +1,34 @@
-// Two-way calendar sync, v1 (Google Calendar):
-//  • events edited in the calendar update the app task (date, start
-//    time, hours, description) through the normal field-clock path, so
-//    the change also reaches Supabase and other devices;
-//  • events deleted in the calendar delete the app task;
-//  • tasks deleted in the app delete their calendar event.
-// Conflicting same-field edits follow calendar-wins here — the calendar
-// is treated as the latest editor at pull time.
+// Bidirectional calendar sync (Google Calendar):
+//  • calendar edits update the app task (and flow on to Supabase);
+//  • app edits update the calendar event;
+//  • deletions propagate both ways;
+//  • both-sides-changed conflicts resolve calendar-wins (documented).
+// Which side changed is decided against the task's externalSnapshot
+// baseline (src/logic/calendarReconcile.ts).
 
+import type { ExternalSnapshot } from '../domain/types';
+import { reconcile } from '../logic/calendarReconcile';
 import { deliveryTarget } from '../logic/delivery';
 import { parseGoogleEventLink } from '../logic/googleEventLink';
-import { deleteGoogleEvent, getGoogleEvent, GoogleEvent } from '../providers/calendar/google';
+import {
+  deleteGoogleEvent,
+  getGoogleEvent,
+  GoogleEvent,
+  updateGoogleEvent,
+} from '../providers/calendar/google';
+import { taskNotes } from '../providers/push';
 import { useDataStore } from '../store/dataStore';
 import { useSettingsStore } from '../store/settingsStore';
 
 export interface PullSummary {
   updated: number;
+  pushedToCalendar: number;
   deletedInApp: number;
   deletedInCalendar: number;
   errors: string[];
 }
 
-function eventFields(event: GoogleEvent): {
-  dueDate?: string;
-  startTime?: string;
-  hours?: number;
-  description?: string;
-} | null {
+function eventFields(event: GoogleEvent): ExternalSnapshot | null {
   const startRaw = event.start?.dateTime ?? event.start?.date;
   const endRaw = event.end?.dateTime ?? event.end?.date;
   if (!startRaw || !endRaw) return null;
@@ -34,9 +37,9 @@ function eventFields(event: GoogleEvent): {
   const pad = (n: number) => String(n).padStart(2, '0');
   return {
     dueDate: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
-    startTime: event.start?.dateTime ? `${pad(start.getHours())}:${pad(start.getMinutes())}` : undefined,
+    startTime: event.start?.dateTime ? `${pad(start.getHours())}:${pad(start.getMinutes())}` : null,
     hours: Math.round(((end.getTime() - start.getTime()) / 3_600_000) * 100) / 100,
-    description: event.summary,
+    description: event.summary ?? '',
   };
 }
 
@@ -44,7 +47,13 @@ export async function pullCalendarChanges(
   onProgress?: (done: number, total: number) => void
 ): Promise<PullSummary> {
   const settings = useSettingsStore.getState();
-  const summary: PullSummary = { updated: 0, deletedInApp: 0, deletedInCalendar: 0, errors: [] };
+  const summary: PullSummary = {
+    updated: 0,
+    pushedToCalendar: 0,
+    deletedInApp: 0,
+    deletedInCalendar: 0,
+    errors: [],
+  };
 
   if (settings.calendarService !== 'google') {
     throw new Error('Two-way calendar sync currently supports Google Calendar only.');
@@ -67,8 +76,7 @@ export async function pullCalendarChanges(
       }
 
       if (task._deleted) {
-        // Deleted in the app → remove the calendar event, then unlink so
-        // later pulls skip it.
+        // Deleted in the app → remove the calendar event, then unlink.
         await deleteGoogleEvent(eventId);
         useDataStore.getState().updateTask(task.id, { externalId: null, externalLink: null });
         summary.deletedInCalendar++;
@@ -79,17 +87,44 @@ export async function pullCalendarChanges(
           useDataStore.getState().deleteTask(task.id);
           summary.deletedInApp++;
         } else {
-          const fields = eventFields(event);
-          if (fields) {
-            const patch: Record<string, unknown> = {};
-            if (fields.dueDate && fields.dueDate !== task.dueDate) patch.dueDate = fields.dueDate;
-            if (fields.startTime && fields.startTime !== task.startTime) patch.startTime = fields.startTime;
-            if (fields.hours != null && Math.abs(fields.hours - task.hours) > 0.01) patch.hours = fields.hours;
-            if (fields.description && fields.description !== task.description) patch.description = fields.description;
-            if (Object.keys(patch).length > 0) {
-              useDataStore.getState().updateTask(task.id, patch);
-              summary.updated++;
-            }
+          const ev = eventFields(event);
+          if (!ev) continue;
+          const taskF: ExternalSnapshot = {
+            dueDate: task.dueDate,
+            startTime: task.startTime ?? null,
+            hours: task.hours,
+            description: task.description,
+          };
+          const action = reconcile(taskF, ev, task.externalSnapshot ?? null);
+
+          if (action.kind === 'pull' || action.kind === 'conflict-pull') {
+            useDataStore.getState().updateTask(task.id, {
+              dueDate: action.fields.dueDate,
+              startTime: action.fields.startTime,
+              hours: action.fields.hours,
+              description: action.fields.description || task.description,
+              externalSnapshot: action.fields,
+            });
+            summary.updated++;
+          } else if (action.kind === 'push') {
+            // Keep the event's time when the app task has none.
+            const startTime = action.fields.startTime ?? ev.startTime ?? '09:00';
+            await updateGoogleEvent(eventId, {
+              title: action.fields.description,
+              date: action.fields.dueDate,
+              startTime,
+              hours: action.fields.hours,
+              notes: taskNotes(task),
+            });
+            const snapshot = { ...action.fields, startTime };
+            useDataStore.getState().updateTask(task.id, {
+              startTime,
+              externalSnapshot: snapshot,
+            });
+            summary.pushedToCalendar++;
+          } else if (!task.externalSnapshot) {
+            // In agreement but no baseline yet — record one.
+            useDataStore.getState().updateTask(task.id, { externalSnapshot: ev });
           }
         }
       }
