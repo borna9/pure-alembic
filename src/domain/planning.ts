@@ -53,6 +53,8 @@ export interface FlexibleDraft extends DraftBase {
 }
 
 export interface PlanningSession {
+  /** Optional user-given name, shown in the sessions list. */
+  name: string;
   windowStart: ISODate; // FR-4
   windowEnd: ISODate;
   routineCategoryId: string | null;

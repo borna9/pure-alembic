@@ -12,6 +12,7 @@ const baseDraft = {
 };
 
 const emptySession: PlanningSession = {
+  name: '',
   windowStart: '2026-07-01',
   windowEnd: '2026-07-07',
   routineCategoryId: 'cat-r',

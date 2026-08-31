@@ -9,7 +9,7 @@ import { REPEAT_INTERVALS, RepeatInterval, TASK_TYPES, TaskType } from '../../do
 import { addDays, compareDates, isWithin } from '../../logic/dates';
 import { usePlanningSession } from '../../store/planningSession';
 import { CategoryPicker } from '../CategoryPicker';
-import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TimeField } from '../fields';
+import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TextField, TimeField } from '../fields';
 import { DraftForm } from './DraftForm';
 import { DraftList } from './DraftList';
 import { colors } from '../theme';
@@ -37,6 +37,9 @@ export function WindowStep() {
         title="Planning window"
         sub="Choose the start and end date of the period you are planning. Every date in this session must fall inside it."
       />
+      <Field label="Session name (optional)">
+        <TextField value={s.name} onChange={s.setName} placeholder="e.g. September push" />
+      </Field>
       <Field label="Start date">
         <DateField value={start} onChange={setStart} />
       </Field>

@@ -6,6 +6,7 @@
 import type { GeneratedTask } from '../domain/planning';
 import type { Task } from '../domain/types';
 import { useDataStore } from '../store/dataStore';
+import { usePlanningSession } from '../store/planningSession';
 
 export interface CommitResult {
   created: number;
@@ -36,7 +37,9 @@ export async function commitPlan(generated: GeneratedTask[]): Promise<CommitResu
   const tagIdsFor = (t: GeneratedTask): string[] =>
     t.tagNames.map((name) => store.findOrCreateTag(name, t.categoryId ?? fallbackCategory()).id);
 
+  const planningSessionId = usePlanningSession.getState().cloudId;
   const toTaskSpec = (t: GeneratedTask): Omit<Task, 'id'> => ({
+    planningSessionId,
     description: t.description,
     completed: false, // FR-8
     taskType: t.taskType,

@@ -11,6 +11,7 @@ import type {
   PlanningSession,
   RoutineDraft,
 } from '../domain/planning';
+import { newId } from '../lib/id';
 import { FieldClock, stampClock } from '../sync/fieldClock';
 
 export const WIZARD_STEPS = [
@@ -45,6 +46,7 @@ interface SessionState extends PlanningSession {
   next: () => void;
   back: () => void;
 
+  setName: (name: string) => void;
   setWindow: (start: string, end: string) => void;
   setCategory: (
     phase: 'routineCategoryId' | 'knownCategoryId' | 'scheduleCategoryId' | 'blockCategoryId',
@@ -61,6 +63,7 @@ interface SessionState extends PlanningSession {
 }
 
 const emptySession: PlanningSession & Pick<SessionState, 'reviewEdits' | 'reviewRemoved'> = {
+  name: '',
   windowStart: '',
   windowEnd: '',
   routineCategoryId: null,
@@ -93,8 +96,11 @@ export const usePlanningSession = create<SessionState>()(
         _clock: {},
         cloudId: null,
 
-        start: () => mutate({ ...emptySession, step: 'window', started: true }),
-        reset: () => mutate({ ...emptySession, step: 'window', started: false }),
+        // Starting or resetting begins a NEW session record; the previous
+        // one stays in the cloud as its own row (recoverable from the
+        // sessions list).
+        start: () => mutate({ ...emptySession, step: 'window', started: true, cloudId: newId() } as Partial<SessionState>),
+        reset: () => mutate({ ...emptySession, step: 'window', started: false, cloudId: newId() } as Partial<SessionState>),
         goTo: (step) => mutate({ step }),
         next: () => {
           const i = WIZARD_STEPS.indexOf(get().step);
@@ -105,6 +111,7 @@ export const usePlanningSession = create<SessionState>()(
           if (i > 0) mutate({ step: WIZARD_STEPS[i - 1] });
         },
 
+        setName: (name) => mutate({ name }),
         setWindow: (windowStart, windowEnd) => mutate({ windowStart, windowEnd, ...clearReview }),
         setCategory: (phase, categoryId) => mutate({ [phase]: categoryId } as Partial<SessionState>),
         addRoutine: (d) => mutate({ routineDrafts: [...get().routineDrafts, d], ...clearReview }),

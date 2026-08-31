@@ -155,6 +155,7 @@ export async function syncNow(): Promise<SyncResult> {
 // from two devices resolve last-writer-wins per field (it is transient
 // working state, so no conflict UI).
 const SESSION_FIELDS = [
+  'name',
   'windowStart',
   'windowEnd',
   'routineCategoryId',
@@ -171,6 +172,16 @@ const SESSION_FIELDS = [
   'started',
 ] as const;
 
+/** Sync only the active planning session (used by the sessions manager). */
+export async function syncActiveSession(): Promise<void> {
+  if (!isBackendConfigured()) return;
+  const supabase = getSupabase();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (!userId) return;
+  await syncPlanningSession(supabase, userId, { pushed: 0, pulled: 0, conflicts: 0 });
+}
+
 async function syncPlanningSession(
   supabase: ReturnType<typeof getSupabase>,
   userId: string,
@@ -185,23 +196,41 @@ async function syncPlanningSession(
   for (const f of SESSION_FIELDS) localFields[f] = s[f];
   const local = { fields: localFields, clock: s._clock ?? {} };
 
-  // A pristine session (never touched on this device) must not be pushed —
-  // it would compete with, and could overwrite, real work from another
-  // device that predates clock stamping.
+  // An empty session is never pushed — nothing to keep, and it must not
+  // compete with real work from another device.
   const pristine =
     !s.started &&
+    !s.name &&
     !s.windowStart &&
-    s.routineDrafts.length + s.knownDrafts.length + s.scheduleDrafts.length + s.blockDrafts.length === 0 &&
-    Object.keys(s._clock ?? {}).length === 0;
+    s.routineDrafts.length + s.knownDrafts.length + s.scheduleDrafts.length + s.blockDrafts.length === 0;
 
-  const { data: rows, error } = await supabase
-    .from('planning_sessions')
-    .select('id, data, clock, updated_at')
-    .order('updated_at', { ascending: false })
-    .limit(1);
-  if (error) throw new Error(`Pull planning session: ${error.message}`);
-  const remoteRow = rows?.[0];
-  const cloudId = remoteRow?.id ?? s.cloudId ?? newId();
+  // The active session syncs against ITS OWN cloud row. A device with no
+  // active session adopts the most recent cloud session; a device with
+  // real local work but no cloud id gets a fresh row — it never adopts
+  // (and can never be overwritten by) some other row.
+  let remoteRow: { id: string; data: unknown; clock: unknown; updated_at: unknown } | null = null;
+  let cloudId = s.cloudId;
+  if (cloudId) {
+    const { data, error } = await supabase
+      .from('planning_sessions')
+      .select('id, data, clock, updated_at')
+      .eq('id', cloudId)
+      .eq('deleted', false)
+      .maybeSingle();
+    if (error) throw new Error(`Pull planning session: ${error.message}`);
+    remoteRow = data;
+  } else if (pristine) {
+    const { data, error } = await supabase
+      .from('planning_sessions')
+      .select('id, data, clock, updated_at')
+      .eq('deleted', false)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(`Pull planning session: ${error.message}`);
+    remoteRow = data?.[0] ?? null;
+    cloudId = remoteRow?.id ?? null;
+  }
+  if (!cloudId) cloudId = newId();
 
   let merged = local;
   if (remoteRow) {

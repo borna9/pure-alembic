@@ -51,6 +51,8 @@ export interface Task {
   externalLink?: string | null;
   /** Provider-side id of the linked item, for two-way sync. */
   externalId?: string | null;
+  /** Id of the planning session this task was committed from. */
+  planningSessionId?: string | null;
   /** Links preparation/follow-up tasks (FR-9/FR-10) to their originating task. */
   parentTaskId?: string | null;
 }

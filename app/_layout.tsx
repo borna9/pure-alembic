@@ -20,6 +20,7 @@ export default function RootLayout() {
         <Stack.Screen name="settings/planning" options={{ title: 'Planning Settings' }} />
         <Stack.Screen name="settings/services" options={{ title: 'Calendar & Reminders' }} />
         <Stack.Screen name="conflicts" options={{ title: 'Sync Conflicts' }} />
+        <Stack.Screen name="sessions" options={{ title: 'Planning Sessions' }} />
       </Stack>
     </>
   );

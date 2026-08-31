@@ -5,6 +5,7 @@ import { useConflictStore } from '../../src/sync/conflictStore';
 
 // FR-30: Settings reachable at all times from the navigation bar.
 const sections = [
+  { href: '/sessions', icon: 'albums', title: 'Planning Sessions', sub: 'Resume, switch, or delete saved sessions' },
   { href: '/settings/profile', icon: 'person-circle', title: 'Profile & Account', sub: 'Display name, sign-in methods, export, deletion' },
   { href: '/settings/planning', icon: 'time', title: 'Planning', sub: 'Available hours per day, cycle dates' },
   { href: '/settings/services', icon: 'cloud', title: 'Calendar & Reminders', sub: 'Connect Google, Microsoft, or Apple services' },

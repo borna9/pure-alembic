@@ -1,5 +1,6 @@
 // Screen 1 — guided planning session container (SRS §4.2).
 
+import { Link } from 'expo-router';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { usePlanningSession, WIZARD_STEPS, WizardStep } from '../../store/planningSession';
 import { Button } from '../fields';
@@ -29,6 +30,11 @@ export function PlanningWizard() {
           calendar and reminders.
         </Text>
         <Button title="Start a planning session" onPress={s.start} />
+        <Link href="/sessions" asChild>
+          <Pressable>
+            <Text style={styles.sessionsLink}>Manage / resume saved sessions</Text>
+          </Pressable>
+        </Link>
       </View>
     );
   }
@@ -82,6 +88,7 @@ const styles = StyleSheet.create({
   intro: { flex: 1, justifyContent: 'center', padding: 24, gap: 16, backgroundColor: colors.background },
   introTitle: { fontSize: 24, fontWeight: '700', color: colors.text },
   introText: { fontSize: 14, color: colors.subtext, lineHeight: 20 },
+  sessionsLink: { fontSize: 14, fontWeight: '600', color: colors.accent, textAlign: 'center' },
   stepBar: { flexDirection: 'row', backgroundColor: colors.card, paddingTop: 8 },
   stepTab: { flex: 1, alignItems: 'center' },
   stepText: { fontSize: 11, fontWeight: '600', color: colors.subtext, marginBottom: 6 },
