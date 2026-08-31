@@ -28,10 +28,16 @@ export interface OAuthProviderConfig {
   extraParams?: Record<string, string>;
 }
 
+// Google forbids custom-scheme redirects on Web clients, so native
+// builds need their own iOS/Android OAuth client (no secret).
+const isWeb = Platform.OS === 'web';
+
 export const GOOGLE_OAUTH: OAuthProviderConfig = {
   connection: 'google',
-  clientIdEnv: 'EXPO_PUBLIC_GOOGLE_CLIENT_ID',
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+  clientIdEnv: isWeb ? 'EXPO_PUBLIC_GOOGLE_CLIENT_ID' : 'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID',
+  clientId: isWeb
+    ? process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID
+    : process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
   tokenEndpoint: 'https://oauth2.googleapis.com/token',
   scopes: ['https://www.googleapis.com/auth/calendar.events'],
@@ -58,10 +64,16 @@ export const MICROSOFT_OAUTH: OAuthProviderConfig = {
  * as an authorized redirect URI on the OAuth client (docs/SETUP.md).
  * Native: the custom-scheme redirect.
  */
-function getRedirectUri(): string {
+function getRedirectUri(config: OAuthProviderConfig): string {
   if (Platform.OS === 'web') {
     const base = process.env.EXPO_PUBLIC_BASE_URL ?? '';
     return `${window.location.origin}${base}/oauth-callback`;
+  }
+  // Google iOS/Android clients require the reversed-client-id scheme.
+  if (config.connection === 'google' && config.clientId) {
+    const reversed =
+      'com.googleusercontent.apps.' + config.clientId.replace('.apps.googleusercontent.com', '');
+    return `${reversed}:/oauth`;
   }
   return makeRedirectUri({ scheme: 'purealembic', path: 'oauth' });
 }
@@ -99,7 +111,7 @@ export async function connectOAuth(config: OAuthProviderConfig): Promise<void> {
     );
   }
 
-  const redirectUri = getRedirectUri();
+  const redirectUri = getRedirectUri(config);
   const request = new AuthRequest({
     clientId: config.clientId,
     scopes: config.scopes,

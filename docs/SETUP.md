@@ -28,8 +28,8 @@ Everything here is **free**. The app runs fully offline with zero setup; each se
      - `https://<you>.github.io/pure-alembic/oauth-callback` (deployed web app)
      - `http://localhost:8081/oauth-callback` and `http://localhost:8090/oauth-callback` (development)
      - `https://<ref>.supabase.co/auth/v1/callback` (Supabase sign-in, §1.5)
-   - For Android/iOS builds create additional Android/iOS client IDs with the package name `com.firststirrings.purealembic` (and the custom scheme redirect `purealembic:/oauth`).
-5. Put the client ID in `EXPO_PUBLIC_GOOGLE_CLIENT_ID`.
+   - For native builds create an **iOS** client ID (bundle ID `com.firststirrings.purealembic`) — Google rejects custom-scheme redirects on Web clients; the app automatically uses the iOS client's reversed-client-id redirect scheme.
+5. Put the Web client ID in `EXPO_PUBLIC_GOOGLE_CLIENT_ID` and the iOS client ID in `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`.
 6. **Web builds only:** Google requires the client secret at the token endpoint for Web clients, so the exchange runs in the `google-token` edge function. Configure and deploy it once:
    ```bash
    npx supabase secrets set GOOGLE_OAUTH_CLIENT_ID=<client-id> GOOGLE_OAUTH_CLIENT_SECRET=<client-secret>
