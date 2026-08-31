@@ -31,6 +31,8 @@ export function emptyDraft(): DraftFormValue {
 export function DraftForm(props: {
   categoryId: string | null;
   showPriority?: boolean; // FR-15/FR-18/FR-22: user selects priority
+  /** Hidden for daily routines — they are auto-tagged "Daily routine". */
+  showTags?: boolean;
   addLabel?: string;
   /** Phase-specific fields rendered between description and hours. */
   children?: ReactNode;
@@ -103,7 +105,9 @@ export function DraftForm(props: {
         ) : null}
       </Field>
 
-      <TagInput categoryId={props.categoryId} tagNames={draft.tagNames} onChange={(tagNames) => update({ tagNames })} />
+      {props.showTags !== false && (
+        <TagInput categoryId={props.categoryId} tagNames={draft.tagNames} onChange={(tagNames) => update({ tagNames })} />
+      )}
 
       <Field label="Notes">
         <TextField value={draft.notes} onChange={(v) => update({ notes: v })} multiline placeholder="Optional notes" />

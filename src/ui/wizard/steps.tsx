@@ -2,11 +2,12 @@
 // WindowStep (FR-4), RoutineStep (Phase A), KnownStep (Phase B),
 // FlexibleStep (Phases C and D share one component).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { FlexibleDraft, KnownDateDraft, KnownDateMode } from '../../domain/planning';
-import { REPEAT_INTERVALS, RepeatInterval, TASK_TYPES, TaskType } from '../../domain/types';
+import { REPEAT_INTERVALS, RepeatInterval } from '../../domain/types';
 import { addDays, compareDates, isWithin } from '../../logic/dates';
+import { useDataStore } from '../../store/dataStore';
 import { usePlanningSession } from '../../store/planningSession';
 import { CategoryPicker } from '../CategoryPicker';
 import { Button, DateField, Field, isValidDate, isValidTime, NumberField, Segmented, TextField, TimeField } from '../fields';
@@ -65,19 +66,34 @@ export function WindowStep() {
 
 export function RoutineStep() {
   const s = usePlanningSession();
+  const findOrCreateCategory = useDataStore((st) => st.findOrCreateCategory);
+
+  // Owner policy: routines need no priority and are always tagged and
+  // categorized "Daily routine" — no pickers shown.
+  useEffect(() => {
+    const cat = findOrCreateCategory('Daily routine');
+    if (s.routineCategoryId !== cat.id) s.setCategory('routineCategoryId', cat.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <View>
       <StepHeading
         title="Phase A — Daily routines"
         sub={`Tasks carried out every day from ${s.windowStart} to ${s.windowEnd}. One instance is created per day.`}
       />
-      <CategoryPicker categoryId={s.routineCategoryId} onChange={(id) => s.setCategory('routineCategoryId', id)} />
       <DraftList
         drafts={s.routineDrafts}
         onRemove={(id) => s.removeDraft('routineDrafts', id)}
         emptyText="No daily routines yet — add one below, or continue."
       />
-      <DraftForm categoryId={s.routineCategoryId} onAdd={(d) => s.addRoutine(d)} addLabel="Add daily routine" />
+      <DraftForm
+        categoryId={s.routineCategoryId}
+        showPriority={false}
+        showTags={false}
+        onAdd={(d) => s.addRoutine({ ...d, priority: 'Medium', tagNames: ['Daily routine'] })}
+        addLabel="Add daily routine"
+      />
     </View>
   );
 }
@@ -96,7 +112,6 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 export function KnownStep() {
   const s = usePlanningSession();
   const [mode, setMode] = useState<KnownDateMode>('dueOnly');
-  const [taskType, setTaskType] = useState<TaskType>('Scheduled');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -157,7 +172,8 @@ export function KnownStep() {
           const recurring = mode === 'weekly' || mode === 'monthly';
           const draft: KnownDateDraft = {
             ...base,
-            taskType,
+            // Owner policy: known-date tasks are always "Scheduled".
+            taskType: 'Scheduled',
             mode,
             startDate:
               mode === 'range' ? startDate : recurring && anchorFromDate ? anchorDate : undefined,
@@ -261,9 +277,6 @@ export function KnownStep() {
         )}
         <Field label="Start time (optional)">
           <TimeField value={startTime} onChange={setStartTime} />
-        </Field>
-        <Field label="Task type">
-          <Segmented<TaskType> options={TASK_TYPES} value={taskType} onChange={setTaskType} />
         </Field>
       </DraftForm>
     </View>

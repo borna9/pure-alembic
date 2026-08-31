@@ -18,6 +18,7 @@ interface DataState {
   categories: Record<string, StoredCategory>;
 
   createCategory: (name: string) => StoredCategory;
+  findOrCreateCategory: (name: string) => StoredCategory;
   /** DR-5/DR-6 select-or-create: reuse an existing tag by name (case-insensitive) or create one. */
   findOrCreateTag: (name: string, categoryId: string) => StoredTag;
   createTask: (task: Omit<Task, 'id'>) => StoredTask;
@@ -42,6 +43,13 @@ export const useDataStore = create<DataState>()(
         const cat: StoredCategory = { id: newId(), name, _clock: stampClock(undefined, { name }) };
         set((s) => ({ categories: { ...s.categories, [cat.id]: cat } }));
         return cat;
+      },
+
+      findOrCreateCategory: (name) => {
+        const existing = Object.values(get().categories).find(
+          (c) => !c._deleted && c.name.toLowerCase() === name.toLowerCase()
+        );
+        return existing ?? get().createCategory(name);
       },
 
       findOrCreateTag: (name, categoryId) => {
