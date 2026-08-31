@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.firststirrings.purealembic",
+      "appleTeamId": "6M42Y965MV",
       "infoPlist": {
         "NSCalendarsFullAccessUsageDescription": "Pure Alembic creates calendar events for the tasks you plan.",
         "NSRemindersFullAccessUsageDescription": "Pure Alembic creates reminders for tasks that have no date or hours."
